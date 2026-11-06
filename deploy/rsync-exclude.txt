@@ -1,0 +1,12 @@
++ .env.example
+- .env
+- .env.*
+- .git/
+- .venv/
+- .pytest_cache/
+- __pycache__/
+- data/
+- reports/
+- models/*.joblib
+- launchd/*.plist
+- *.log

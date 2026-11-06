@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.venv/
+__pycache__/
+*.log
+.env
+data/
+reports/
+models/*.joblib
+models/*.onnx
+models/*.pt
+
+# LaunchAgents generated from launchd/templates by scripts/install_launchd.sh (contain machine-specific paths)
+launchd/*.plist
+
+# example strategies checked out by CI
+_examples/

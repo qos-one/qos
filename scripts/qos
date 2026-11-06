@@ -1,0 +1,4 @@
+#!/bin/zsh
+# The code folder comes from this script's location (QOS_HOME is the data location, not the code location)
+BOT="${0:A:h:h}"
+exec uv run --quiet --project "$BOT" python "$BOT/qos_cli.py" "$@"

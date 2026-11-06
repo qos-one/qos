@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>@LABEL@</string>
+    <!-- Update the data catalog daily at 05:20 (local time), after the FX market's daily close (17:00 New York) -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string><string>@BOT@/scripts/launchd_run.sh</string><string>catalog</string>
+        <string>uv</string><string>run</string><string>scripts/build_catalog.py</string><string>--update</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>@ENV@</dict>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+</dict>
+</plist>

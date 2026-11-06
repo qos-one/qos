@@ -1,0 +1,52 @@
+QOS — Quant Operating System (engine, API and command-line tools)
+Copyright (c) 2026 Seksin Cheevirot and the QOS contributors
+https://qos.one
+
+Licensing
+---------
+This repository contains code under two licenses:
+
+* Everything not listed below is licensed under the GNU Affero General Public License,
+  version 3 only (AGPL-3.0-only). See LICENSE.
+
+* The developer kit is licensed under the Apache License, version 2.0 (Apache-2.0), so that
+  strategies and agents written with it can use any license, including proprietary ones:
+    - qos/sdk/          (see qos/sdk/LICENSE)
+    - qos/templates/    (files created by `qos new`)
+    - qos_sdk/          (the standalone SDK package)
+    - qos/paths.py      (folder locations used by the developer kit)
+
+Additional permissions (AGPL-3.0 section 7) — DRAFT, for legal review
+-------------------------------------------------------------------
+As copyright holder of the AGPL-3.0-only parts of this repository, Seksin Cheevirot grants
+the following additional permissions. They apply to everyone who receives this software, and
+you may remove them from your own modified versions.
+
+1. QOS Agent Exception. A strategy, agent or model (an "Agent") that interacts with QOS only
+   through the developer kit (qos/sdk/, qos_sdk/) or the documented plugin interfaces is not
+   required to be licensed under AGPL-3.0 because QOS loads and runs it in the same process.
+   You may license and distribute such an Agent, in source or compiled form, under terms of
+   your choice. This exception does not cover changes to QOS itself.
+
+2. Broker API Exception. You may combine QOS with the Interactive Brokers API (ibapi, including
+   the nautilus_ibapi package) and convey the combination, even though that API is not under a
+   GPL-compatible license. You must still follow the API's own license terms. The
+   corresponding source of QOS does not have to include the source of that API.
+
+Agents published to the qos.one Marketplace are covered by the qos.one Developer Agreement,
+not by the licenses in this repository.
+
+"QOS", "qos.one" and the QOS logo are trademarks and are not licensed under AGPL-3.0 or
+Apache-2.0. See TRADEMARKS.md.
+
+Third-party software
+--------------------
+QOS uses third-party libraries under their own licenses, including NautilusTrader
+(LGPL-3.0) and the Interactive Brokers API (proprietary; "IB API Non-Commercial License or the
+IB API Commercial License", installed separately from PyPI and not included in this repository). The full list of dependencies and their versions is in pyproject.toml and
+uv.lock; each dependency's license applies to that dependency.
+
+No warranty
+-----------
+QOS is trading software. It is provided "as is", without warranty of any kind. Trading
+involves substantial risk of loss. Nothing in this repository is investment advice.

@@ -1,0 +1,18 @@
+[Unit]
+Description=QOS bot API (engine, node manager, IB connection)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/qos/engine/bot
+EnvironmentFile=/srv/qos/deploy.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/uv run --frozen uvicorn api.server:app --host 127.0.0.1 --port 8000
+KillMode=process
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

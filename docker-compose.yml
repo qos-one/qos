@@ -1,0 +1,21 @@
+# Redis for QOS: event bus between the Nautilus node and the API (MessageBus streams) and status cache
+#   start:  docker compose up -d        check:  docker compose exec redis redis-cli ping   → PONG
+# bound to 127.0.0.1 only (not exposed outside the machine); data persisted as AOF in a volume
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: quantx-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - quantx-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  quantx-redis-data:

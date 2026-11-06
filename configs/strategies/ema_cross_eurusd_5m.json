@@ -1,0 +1,12 @@
+{
+  "strategy": "ema_cross",
+  "strategy_id": "QXEmaCross-EURUSD-5M",
+  "instrument": "EUR/USD.IDEALPRO",
+  "tf_minutes": 5,
+  "fast": 10,
+  "slow": 30,
+  "trade_size": "20000",
+  "sl_pips": 15,
+  "tp_pips": 30,
+  "allow_short": true
+}
