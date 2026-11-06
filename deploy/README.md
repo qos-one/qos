@@ -96,6 +96,7 @@ cash balance instead, so the nightly restart needs no action.
 ## Day to day
 
 - IB Gateway restarts itself every night (`AUTO_RESTART_TIME`). About once a week IBKR asks for a new login: approve it in IBKR Mobile, or nodes stop trading.
+- Tunnel in the background (starts at login, reconnects by itself): `QOS_ENGINE_HOST=ENGINE deploy/tunnel-autostart.sh install`; `deploy/tunnel-autostart.sh status` to check, `uninstall` to remove.
 - See the IB Gateway screen: tunnel open, then Finder → Go → Connect to Server → `vnc://localhost:5901`.
 - Update the code: `RESTART=1 QOS_ENGINE_HOST=ENGINE deploy/deploy-engine.sh` (nodes keep running; the API adopts them after the restart).
 - Logs: `ssh ENGINE 'journalctl --user -u qos-api -n 100 --no-pager'` · node logs in `/srv/qos/home/data/logs`.
