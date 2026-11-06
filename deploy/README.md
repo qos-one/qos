@@ -28,9 +28,11 @@ The bot API, the Nautilus nodes, Redis and IB Gateway run on the server. The Ter
 
 ## Phase 2 — cut-over (weekend, FX closed; about 1–2 hours)
 
-Starting the nodes on the server resets their soak count.
+Starting the nodes on the server resets their soak count. Nodes start flat: stopping a node does not close its position, and a
+restarted node does not take it over (see [After a node restart](#after-a-node-restart-align-the-books)).
 
-1. Mac, Terminal: note open positions (Positions tab / Reconcile), then stop every node.
+1. Mac, Terminal: note open positions (Positions tab / Reconcile), then stop every node. Their open positions stay at IBKR;
+   close them first if you do not want to carry them as manual positions.
 2. Mac: stop the local services (they would fight the server for the IB session):
    ```
    launchctl list | grep -E "qos|quantx"
@@ -61,7 +63,32 @@ Starting the nodes on the server resets their soak count.
    ```
    QOS_ENGINE_HOST=ENGINE deploy/tunnel.sh
    ```
-   Check Reconcile matches IBKR, then start the nodes.
+   Check Reconcile matches IBKR, then start the nodes, then align the books (next section).
+
+## After a node restart: align the books
+
+A Nautilus node starts flat every time it starts (cut-over, server reboot, manual stop/start). Its fill-history book still holds
+the old position, and closing that position by hand books the close to the manual/agent book. Reconcile then shows
+"node live position and fill history disagree" or an `untracked` row.
+
+1. Decide what happens to each old position: close it in the Terminal (Positions → Close), or keep it as a manual position.
+2. Start the nodes and wait until each one has a fresh heartbeat (Nodes tab: running).
+3. Dry run with the instruments that disagree (nothing is written, nothing is sent to IBKR):
+   ```
+   ssh ENGINE 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen scripts/reset_node_books.py FX:USDJPY FX:AUDUSD'
+   ```
+   Each line shows `book  current → target`: every running node's book is set to the quantity the node reports, the
+   manual/agent book to the IBKR quantity minus what the nodes hold. A line `skip: node … has no fresh heartbeat` means that
+   node is not running yet: start it and run again.
+4. If the targets are right, write them (adds `adjustment` rows with zero P&L; trade history stays intact):
+   ```
+   ssh ENGINE 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen scripts/reset_node_books.py FX:USDJPY FX:AUDUSD --apply'
+   ```
+5. Within 30 s Reconcile shows `ok` (a small residue such as `IBKR +3 · manual/agent +3` is `external` and fine).
+
+Restarting only the API (`RESTART=1` deploy) does not need this: the nodes keep running and are adopted.
+USDxxx pairs (USDJPY …): IBKR's virtual position resets at every IB Gateway restart; the API uses the history books and the
+cash balance instead, so the nightly restart needs no action.
 
 ## Day to day
 

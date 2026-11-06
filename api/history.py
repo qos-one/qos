@@ -282,6 +282,24 @@ def book_positions(account: str | None = None) -> dict[str, dict[str, float]]:
     return out
 
 
+def last_fill_ts(account: str | None, key: str) -> datetime | None:
+    """Time of the newest real fill (not a book adjustment) for one instrument, UTC; None if there is none"""
+    con = connect()
+    ac, aa = _acct_clause(account)
+    rows = con.execute("SELECT ts FROM fills WHERE key = ? AND COALESCE(order_ref, '') != 'adjustment'" + ac + " ORDER BY ts DESC LIMIT 20",
+                       [key, *aa]).fetchall()
+    con.close()
+    best = None
+    for (ts,) in rows:                     # ts strings may mix offsets: compare parsed values
+        try:
+            d = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        d = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        best = d if best is None or d > best else best
+    return best
+
+
 def adjust_book(account: str, key: str, target: float, note: str = "", price: float | None = None) -> float:
     """Adjust an instrument's manual/agent book to target (e.g. the actual position at IBKR) with an 'adjustment' row
     Used when fill history is incomplete (fills before recording began / while the API was not running) — no effect on P&L:

@@ -1042,9 +1042,11 @@ def _fx_cash_map() -> dict[str, dict]:
             cash_q = float(round(-bal / px)) if px else None
             tol = max(1000.0, 0.02 * abs(books_q))
             warn = None
-            if books_q and (cash_q is None or abs(books_q - cash_q) <= tol or _books_match_nodes(active_account(), k)):
+            recent = _recent_fill(active_account(), k)     # cash balance lags fills by up to ~3 min: books win meanwhile
+            if (books_q or recent) and (cash_q is None or abs(books_q - cash_q) <= tol or recent
+                                        or _books_match_nodes(active_account(), k)):
                 qty = float(round(books_q))            # books win; the cash value only flags a difference
-                if cash_q is not None and abs(cash_q - qty) > tol:
+                if cash_q is not None and abs(cash_q - qty) > tol and not recent:
                     warn = f"cash balance implies {cash_q:+,.0f}; possible trade outside QOS"
                     if _cash_warn_sent.get(k) != _today():          # once per key and trading day
                         _cash_warn_sent[k] = _today()
@@ -1057,6 +1059,18 @@ def _fx_cash_map() -> dict[str, dict]:
             qty = float(round(bal))
         out[k] = {"ccy": cur, "cash": bal, "qty": qty}
     return out
+
+
+CASH_LAG_SEC = 300                # IBKR updates CashBalance about every 3 minutes
+
+
+def _recent_fill(acct: str, key: str) -> bool:
+    """A fill for this instrument within CASH_LAG_SEC: the cash balance may not include it yet"""
+    try:
+        ts = history.last_fill_ts(acct or None, key)
+    except Exception:
+        return False
+    return ts is not None and (datetime.now(timezone.utc) - ts).total_seconds() < CASH_LAG_SEC
 
 
 def _books_match_nodes(acct: str, key: str) -> bool:
@@ -1114,8 +1128,7 @@ def _fx_residue(key: str, cash: float, acct: str) -> bool:
 def _fx_cash(k: str) -> float | None:
     """Real FX exposure for XXXUSD pairs = the account's cash balance in XXX (cross-pair legs removed, whole units)
     (CASH positions from IBKR reqPositions are virtual amounts that may not match real cash, e.g. they vanish after a gateway restart and recount from zero)
-    Returns None if there is no balance data for that currency, and always for USDxxx pairs: their virtual position is
-    exact, while −cash / price is only approximate (used only when the virtual position is missing)"""
+    Returns None if there is no balance data for that currency, and always for USDxxx pairs (see _fx_usd_base_qty)"""
     mkt, sym = parse_key(k)
     if mkt != "FX" or not sym.endswith("USD") or sym.startswith("USD"):
         return None
@@ -1123,16 +1136,31 @@ def _fx_cash(k: str) -> float | None:
     return e["qty"] if e else None
 
 
+def _fx_usd_base_qty(k: str, virtual: float) -> float | None:
+    """Position for a USDxxx pair (USDJPY, USDCHF …). IBKR keeps it as a virtual CASH position that resets to zero on every
+    gateway restart and then counts only the trades made since: after the nightly restart a sell that closes a +20,000 long
+    shows −20,000 although the account is flat. The virtual value is trusted only while it equals the open history books
+    (no restart since those trades); otherwise the cash-balance view of _fx_cash_map (books cross-checked against
+    −cash / price). None = no balance data or no price: callers keep the virtual position."""
+    e = _fx_cash_map().get(k)
+    if not e or e.get("qty") is None:
+        return None
+    if virtual and abs(virtual - _open_books(active_account(), k)[0]) < 1:
+        return virtual
+    return e["qty"]
+
+
 def position_qty(key: str) -> float:
     mkt, sym = parse_key(key)
     k = f"{mkt}:{sym}"
     virtual = sum(_f(p.position) for p in ib.positions() if key_of_contract(p.contract) == k and _mine(p.account))
-    cash = _fx_cash(k)
-    if cash is None and virtual == 0 and mkt == "FX" and sym.startswith("USD"):   # USDxxx virtual position gone: from the cash balance
-        cash = (_fx_cash_map().get(k) or {}).get("qty")
-    if cash is None:
+    if mkt == "FX" and sym.startswith("USD"):
+        cash = _fx_usd_base_qty(k, virtual)
+    else:
+        cash = _fx_cash(k)
+    if cash is None or cash == virtual:
         return virtual
-    if virtual == 0 and cash:                                 # same rule as /positions: leftover P&L cash is not a position
+    if cash:                                                  # same rule as /positions: leftover P&L cash is not a position
         e = _fx_cash_map().get(k) or {}
         if _fx_residue(k, e.get("cash", 0.0), active_account()):
             return 0.0
@@ -2087,10 +2115,14 @@ async def positions():
             item = port.get(key)
             qty = _f(p.position)
             avg = _f(p.avgCost)
-            cash = _fx_cash(key) if p.contract.secType == "CASH" else None
-            if cash is not None and abs(cash - qty) >= 1:          # use the real cash balance instead of the IBKR virtual position
+            cash = None
+            if p.contract.secType == "CASH":
+                cash = _fx_usd_base_qty(key, qty) if sym.startswith("USD") else _fx_cash(key)
+            from_cash = cash is not None and abs(cash - qty) >= 1
+            if from_cash:                                          # use the real cash balance instead of the IBKR virtual position
                 qty, item = cash, None
-                if qty == 0:
+                e = cash_map.get(key) or {}
+                if qty == 0 or _fx_residue(key, e.get("cash", 0.0), acct):
                     continue
                 try:
                     avg = history.open_cost(acct, key) or avg       # open trade of the shared manual/agent book
@@ -2103,7 +2135,15 @@ async def positions():
                 mv = qty * mp
                 upnl = (mp - avg) * qty if mp else 0.0
                 rpnl = 0.0
-            rows.append(_position_row(key, mkt, sym, p.contract.secType, p.contract.currency, qty, avg, mp, mv, upnl, rpnl, rates))
+            row = _position_row(key, mkt, sym, p.contract.secType, p.contract.currency, qty, avg, mp, mv, upnl, rpnl, rates)
+            if from_cash:
+                e = cash_map.get(key) or {}
+                row["origin"], row["ib_virtual_qty"] = "cash_balance", _f(p.position)
+                if e.get("cash_qty") is not None and e["cash_qty"] != qty:
+                    row["cash_qty"] = e["cash_qty"]
+                if e.get("cash_warn"):
+                    row["cash_warn"] = e["cash_warn"]
+            rows.append(row)
         except Exception as e:
             print("positions: skip", getattr(p.contract, "localSymbol", "?"), e)
             audit("positions_row_error", symbol=getattr(p.contract, "localSymbol", "?"), error=str(e)[:200])
