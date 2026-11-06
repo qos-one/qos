@@ -44,6 +44,12 @@ uv run uvicorn api.server:app --port 8000
 Check it is up with `curl localhost:8000/health`, then open the QOS Terminal. Without
 `QOS_HOME`, QOS keeps its files next to the code (`data/`, `configs/`, `reports/`).
 
+## Run it on a server
+
+To keep strategies trading while your computer is off, install QOS on your own Linux server with one script, then
+use the Terminal through an SSH tunnel or in the browser on your own domain:
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+
 ## Market data
 
 Backtests, walk-forward and the Store checks read bars from a local NautilusTrader data

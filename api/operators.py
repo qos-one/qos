@@ -20,6 +20,16 @@ ROLES = ("admin", "trader", "risk", "viewer", "assistant")   # assistant = LLM v
 IDLE_SEC = 30 * 60          # auto-lock after 30 minutes idle
 MAX_SEC = 12 * 3600         # maximum session lifetime
 _tokens: dict[str, dict] = {}
+
+
+def public_mode() -> bool:
+    """QOS_PUBLIC_TERMINAL=1: the Terminal is served on a public domain (deploy/README, option B). Then no legacy
+    no-operator admin, no web bootstrap, longer PINs and a global login-failure limit."""
+    return os.getenv("QOS_PUBLIC_TERMINAL", "") == "1"
+
+
+def min_pin() -> int:
+    return 8 if public_mode() else 4
 current: contextvars.ContextVar[dict | None] = contextvars.ContextVar("current_operator", default=None)
 
 
@@ -54,8 +64,8 @@ def list_ops() -> list[dict]:
 def create(name: str, role: str, pin: str, created_by: str = "") -> dict:
     if role not in ROLES:
         raise ValueError(f"role must be one of {ROLES}")
-    if len(pin) < 4:
-        raise ValueError("PIN must be at least 4 characters")
+    if len(pin) < min_pin():
+        raise ValueError(f"PIN must be at least {min_pin()} characters")
     doc = _load()
     oid = name.strip().lower().replace(" ", "_")
     if any(o["id"] == oid for o in doc["operators"]):
@@ -83,8 +93,8 @@ def update(oid: str, role: str | None = None, active: bool | None = None, pin: s
                         if sess["id"] == oid:
                             _tokens.pop(t, None)
             if pin:
-                if len(pin) < 4:
-                    raise ValueError("PIN must be at least 4 characters")
+                if len(pin) < min_pin():
+                    raise ValueError(f"PIN must be at least {min_pin()} characters")
                 o["salt"] = secrets.token_hex(8); o["pin_hash"] = _hash(pin, o["salt"])
             _save(doc)
             return {k: v for k, v in o.items() if k not in ("pin_hash", "salt")}
@@ -92,12 +102,15 @@ def update(oid: str, role: str | None = None, active: bool | None = None, pin: s
 
 
 _fail: dict[str, list[float]] = {}
+_fail_all: list[float] = []
+FAIL_ALL_MAX = 20           # failed logins across all operators per 10 minutes (stops guessing by rotating operator ids)
 
 
 def login(oid: str, pin: str) -> tuple[str, dict]:
     now = time.time()
     fails = [t for t in _fail.get(oid, []) if now - t < 600]
-    if len(fails) >= 5:
+    _fail_all[:] = [t for t in _fail_all if now - t < 600]
+    if len(fails) >= 5 or len(_fail_all) >= FAIL_ALL_MAX:
         raise PermissionError("too many failed attempts — wait 10 minutes")
     doc = _load()
     for o in doc["operators"]:
@@ -107,6 +120,7 @@ def login(oid: str, pin: str) -> tuple[str, dict]:
             _tokens[tok] = {"id": o["id"], "name": o["name"], "role": o["role"], "start": now, "last": now}
             return tok, _tokens[tok]
     _fail.setdefault(oid, []).append(now)
+    _fail_all.append(now)
     raise PermissionError("invalid operator or PIN")
 
 

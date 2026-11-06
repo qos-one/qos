@@ -1,0 +1,20 @@
+[Unit]
+Description=QOS Terminal, web version (served to the browser through Caddy; talks to the bot API on 127.0.0.1:8000)
+After=network-online.target qos-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/qos/terminal/current
+EnvironmentFile=-/srv/qos/terminal.env
+Environment=IP=127.0.0.1
+Environment=PORT=8080
+Environment=BOT_API=http://127.0.0.1:8000
+Environment=QOS_PUBLIC_TERMINAL=1
+Environment=QOS_WS_URL=/ws
+ExecStart=/srv/qos/terminal/current/server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

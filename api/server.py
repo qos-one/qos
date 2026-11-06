@@ -4041,6 +4041,37 @@ def _close_order(k: str, qty: float, ref: str) -> MarketOrder:
     return o
 
 
+FLATTEN_REFS = ("manual:close", "manual:reverse")       # orderRef prefixes of close / close_all / reverse orders
+_flattening: set[str] = set()                           # keys whose close/reverse request is between check and placeOrder
+
+
+def _pending_flatten(k: str | None = None) -> list[int]:
+    """Working close / close-all / reverse orders (not filled, not cancelled) on the selected account, for key k or all keys.
+    A second Close sent before the first one fills would flip the position (two terminals, a double click, or an order
+    that sits in PreSubmitted for minutes)."""
+    out = []
+    for tr in ib.openTrades():
+        o = tr.order
+        if not (getattr(o, "orderRef", "") or "").startswith(FLATTEN_REFS) or not _mine(getattr(o, "account", "") or ""):
+            continue
+        done = getattr(tr, "isDone", None)
+        if (done() if callable(done) else False) or (k is not None and key_of_contract(tr.contract) != k):
+            continue
+        out.append(o.orderId)
+    return out
+
+
+def _claim_flatten(k: str) -> None:
+    """Refuse a close/reverse while one is already working for k; otherwise mark k as in flight (call release later).
+    No await between the check and the claim, so two simultaneous requests cannot both pass."""
+    ids = _pending_flatten(k)
+    if ids or k in _flattening or "*" in _flattening:
+        audit("close_refused_pending", key=k, order_ids=ids)
+        raise HTTPException(409, f"A close order for {k} is already working (order {', '.join(map(str, ids)) or 'being sent'}). "
+                                 "Wait for it to fill, or cancel it in Orders first.")
+    _flattening.add(k)
+
+
 def _bracket_order_ids(k: str) -> list[int]:
     """Working TP/SL legs of key k on the selected account plus the still-working entries of their brackets"""
     trades = [tr for tr in ib.openTrades() if key_of_contract(tr.contract) == k and _mine(getattr(tr.order, "account", "") or "")]
@@ -4081,16 +4112,20 @@ async def close_position(key: str, force: bool = False):
     owners = _node_owners(k)
     if owners and not force:
         raise HTTPException(409, f"{k} is held by running node {', '.join(owners)} — stop the node first (it closes its positions), or close with force=true")
-    c = await contract_for(k)
-    qty = await _current_qty(k)
-    if mkt == "FX":
-        qty = float(round(qty))
-    if qty == 0:
-        raise HTTPException(404, f"No position in {k}")
-    o = _close_order(k, qty, "manual:close")
-    legs = _cancel_bracket_legs(k)                 # orphaned TP/SL legs would open a NEW position when touched
-    audit("close_position", key=k, qty=qty, mode=load_mode(), force=force, nodes=owners, cancelled_legs=legs)
-    trade = ib.placeOrder(c, o)
+    _claim_flatten(k)
+    try:
+        c = await contract_for(k)
+        qty = await _current_qty(k)
+        if mkt == "FX":
+            qty = float(round(qty))
+        if qty == 0:
+            raise HTTPException(404, f"No position in {k}")
+        o = _close_order(k, qty, "manual:close")
+        legs = _cancel_bracket_legs(k)                 # orphaned TP/SL legs would open a NEW position when touched
+        audit("close_position", key=k, qty=qty, mode=load_mode(), force=force, nodes=owners, cancelled_legs=legs)
+        trade = ib.placeOrder(c, o)
+    finally:
+        _flattening.discard(k)
     for _ in range(20):
         await asyncio.sleep(0.2)
         if trade.isDone():
@@ -4185,6 +4220,19 @@ async def migrate_agents(dry_run: bool = True, force: bool = False, start: bool 
 async def close_all_positions():
     """Cancel all open orders, then close every position with market orders"""
     await ensure_connected()
+    pending = _pending_flatten()
+    if pending or _flattening:
+        audit("close_refused_pending", key="ALL", order_ids=pending)
+        raise HTTPException(409, f"Close orders are already working (order {', '.join(map(str, pending)) or 'being sent'}). "
+                                 "Wait for them to fill, or cancel them in Orders first.")
+    _flattening.add("*")
+    try:
+        return await _close_all_impl()
+    finally:
+        _flattening.discard("*")
+
+
+async def _close_all_impl() -> dict:
     audit("close_all", account=active_account())
     for tr in ib.openTrades():
         if _mine(getattr(tr.order, "account", "") or ""):          # multi-account login: the selected account only
@@ -4242,7 +4290,11 @@ async def reverse_position(key: str):
         raise HTTPException(404, f"No position in {k}")
     side = "SELL" if qty > 0 else "BUY"
     old = set(_bracket_order_ids(k))                    # the old position's TP/SL (and working bracket entries)
-    res = await submit_order("manual:reverse", k, side, abs(qty) * 2)      # a rejected reverse keeps the old protection
+    _claim_flatten(k)
+    try:
+        res = await submit_order("manual:reverse", k, side, abs(qty) * 2)      # a rejected reverse keeps the old protection
+    finally:
+        _flattening.discard(k)
     if res.get("status") in ORDER_LIVE_STATUSES:
         res["cancelled_legs"] = _cancel_bracket_legs(k, only=old)      # they would act on the new side
         audit("reverse_legs_cancelled", key=k, order_ids=res["cancelled_legs"])
@@ -4589,12 +4641,21 @@ async def notify_test():
 
 
 # ---------- websocket ----------
+OP_COOKIE = "qos_op"        # operator token cookie set by the web Terminal (HttpOnly, Secure, SameSite=Strict)
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     if not _local_origin(ws.headers.get("origin")) or not _host_ok(ws.headers.get("host")):              # browsers do not apply CORS to WebSockets: refuse other sites
         audit("forbidden_origin", origin=str(ws.headers.get("origin"))[:100], method="WS", path="/ws")
         await ws.close(code=1008)
         return
+    if ops.public_mode():                          # public Terminal: the live stream needs a signed-in operator
+        tok = ws.query_params.get("op_token") or ws.cookies.get(OP_COOKIE) or ws.headers.get("x-operator-token")
+        if ops.resolve(tok) is None:
+            audit("ws_refused_no_operator", path="/ws")
+            await ws.close(code=1008)
+            return
     await ws.accept()
     _ws_clients.add(ws)
     try:
@@ -4705,7 +4766,11 @@ async def operator_guard(request, call_next):
     token = request.headers.get("x-operator-token") or request.query_params.get("op_token")
     op = ops.resolve(token)
     if op is None and not ops.configured():
-        op = {"id": "local", "name": "Local user", "role": "admin"}      # no operators set yet → legacy mode (personal machine)
+        if ops.public_mode() and path not in ops.PUBLIC:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "no operator configured: run `qos operator add <name> --role admin` on the server"}, status_code=503)
+        if not ops.public_mode():
+            op = {"id": "local", "name": "Local user", "role": "admin"}      # no operators set yet → legacy mode (personal machine)
     ops.current.set(op)
     _req_meta.set({"source": request.headers.get("x-source", "terminal")[:40], "request_id": request.headers.get("x-request-id", "")[:64]})
     if path in ops.PUBLIC or path.startswith("/docs"):
@@ -4760,6 +4825,8 @@ async def operators_bootstrap(body: OpCreateBody):
     """Create the first admin (only allowed while no operator exists)"""
     if ops.configured():
         raise HTTPException(409, "operators already configured")
+    if ops.public_mode():
+        raise HTTPException(403, "public Terminal: create the first admin on the server with `qos operator add <name> --role admin`")
     op = ops.create(body.name, "admin", body.pin, created_by="bootstrap")
     audit("operator_bootstrap", operator_id=op["id"])
     tok, sess = ops.login(op["id"], body.pin)

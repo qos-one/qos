@@ -814,8 +814,47 @@ def main(argv=None) -> int:
     p.add_argument("device_id", nargs="?")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_cloud)
+    p = sub.add_parser("operator", help="Terminal operators (sign-in with PIN): add the first admin, list, reset a PIN")
+    osub = p.add_subparsers(dest="op_cmd", required=True)
+    op = osub.add_parser("add", help="add an operator (asks for the PIN)")
+    op.add_argument("name")
+    op.add_argument("--role", default="admin", choices=["admin", "trader", "risk", "viewer", "assistant"])
+    op = osub.add_parser("list", help="list operators")
+    op = osub.add_parser("pin", help="set a new PIN for an operator")
+    op.add_argument("id")
+    p.set_defaults(fn=cmd_operator)
     a = ap.parse_args(argv)
     return a.fn(a)
+
+
+def _ask_pin(minimum: int) -> str:
+    import getpass
+    pin = getpass.getpass(f"PIN (at least {minimum} characters): ")
+    if pin != getpass.getpass("PIN again: "):
+        raise SystemExit("PINs do not match")
+    return pin
+
+
+def cmd_operator(a) -> int:
+    """Operators live in QOS_HOME/data/operators.json; the running API reads the file on every check, no restart needed"""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from api import operators as ops
+    try:
+        if a.op_cmd == "add":
+            o = ops.create(a.name, a.role, _ask_pin(ops.min_pin()), created_by="cli")
+            print(f"added {o['id']} ({o['role']}) · sign in on the Terminal with this PIN")
+        elif a.op_cmd == "pin":
+            ops.update(a.id, pin=_ask_pin(ops.min_pin()))
+            print(f"new PIN set for {a.id}")
+        else:
+            rows = ops.list_ops()
+            for o in rows:
+                print(f"{o['id']:<20} {o['role']:<10} {'active' if o.get('active', True) else 'disabled'}")
+            if not rows:
+                print("no operators yet · add one: qos operator add <name> --role admin")
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"error: {e}")
+    return 0
 
 
 if __name__ == "__main__":

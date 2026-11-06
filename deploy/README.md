@@ -1,5 +1,8 @@
 # Moving the engine and IB Gateway to a Linux VPS
 
+New install on a fresh server: run `deploy/install.sh` on the server instead, see [docs/SELF_HOSTING.md](../docs/SELF_HOSTING.md).
+This page covers moving an existing install from a Mac and the tools for running it day to day.
+
 The bot API, the Nautilus nodes, Redis and IB Gateway run on the server. The Terminal stays on your Mac and connects through an SSH tunnel; no trading port is opened on the internet.
 
 | On the server | Path |
@@ -101,6 +104,48 @@ cash balance instead, so the nightly restart needs no action.
   ssh ENGINE '(crontab -l 2>/dev/null; echo "41 3 * * * tar czf /srv/qos/backups/engine-\$(date +\%F).tgz -C /srv/qos/home data configs strategies models .env && find /srv/qos/backups -name \"engine-*.tgz\" -mtime +14 -delete") | crontab -'
   ```
 - Never run the test suite on the server while nodes run (`deploy-engine.sh` refuses `TESTS=1` when the API is up).
+
+## Web Terminal (browser, on the engine server)
+
+Optional: the Terminal also runs on the engine server and opens in any browser at `https://<terminal-domain>`. The Mac
+Terminal keeps working at the same time (both talk to the same API).
+
+```
+browser ──HTTPS──► Caddy :443 ──► Terminal (web) 127.0.0.1:8080 ──► bot API 127.0.0.1:8000
+                        └── /ws ─────────────────────────────────────► bot API (live stream)
+```
+
+The API, Redis, IB Gateway and VNC stay on 127.0.0.1. With `QOS_PUBLIC_TERMINAL=1` the API refuses everything until an
+operator exists, never creates the first admin from the web, asks for PINs of 8+ characters, locks sign-in after 20
+failures in 10 minutes (5 per operator) and needs a signed-in operator for the live stream. Each browser keeps its own
+session in an HttpOnly cookie. Close / Reverse / Close all are refused while a close order for the same position is
+still working (two screens, double clicks).
+
+1. DNS: an A record `terminal` → the engine server's IP. Wait until `dig +short terminal.<domain>` shows it.
+2. First admin, on the server (the PIN is typed there, never sent anywhere):
+   ```
+   ssh -t ENGINE 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen python -m qos.cli operator add <name> --role admin'
+   ```
+3. API settings: add to `/srv/qos/deploy.env`, then restart the API (nodes keep running):
+   ```
+   QOS_PUBLIC_TERMINAL=1
+   QOS_TRUSTED_ORIGINS=https://terminal.<domain>
+   ```
+   `ssh ENGINE 'systemctl --user restart qos-api.service'`
+4. Caddy and firewall, as root, once (`QOS_ALLOW_IPS` is optional: only these addresses may open the Terminal):
+   ```
+   ssh root@<server-ip> 'cd /srv/qos/engine/bot/deploy && QOS_TERMINAL_DOMAIN=terminal.<domain> ACME_EMAIL=<you@domain> bash terminal-setup.sh'
+   ```
+5. Build: dashboard repo → Actions → "Web Terminal" → Run workflow (about 15 minutes). Then on the Mac:
+   ```
+   gh run download -R <owner>/<dashboard-repo> -n qos-terminal-web -D /tmp/qos-terminal-web
+   QOS_ENGINE_HOST=ENGINE deploy/deploy-terminal.sh /tmp/qos-terminal-web/qos-terminal-web.tgz
+   ```
+6. Open `https://terminal.<domain>`, sign in with the operator PIN.
+
+Updates: run the workflow again and repeat step 5 (the last three builds are kept in `/srv/qos/terminal/releases`).
+Logs: `ssh ENGINE 'journalctl --user -u qos-terminal -n 50 --no-pager'` · `/var/log/caddy/terminal.log`.
+Switch it off: `ssh ENGINE 'systemctl --user disable --now qos-terminal.service'` and `systemctl disable --now caddy` (root).
 
 ## Rollback to the Mac
 

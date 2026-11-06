@@ -1,0 +1,36 @@
+# Web Terminal on the engine server (deploy/README.md, "Web Terminal").
+# QOS_TERMINAL_DOMAIN and QOS_ALLOW_IPS come from /etc/default/caddy (written by deploy/terminal-setup.sh).
+{
+	email {$ACME_EMAIL}
+}
+
+{$QOS_TERMINAL_DOMAIN} {
+	@denied not remote_ip {$QOS_ALLOW_IPS:0.0.0.0/0 ::/0}
+	respond @denied "Forbidden" 403
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# live stream: straight to the bot API (it checks the Origin and the operator cookie)
+	@ws path /ws
+	reverse_proxy @ws 127.0.0.1:8000 {
+		header_up Host 127.0.0.1:8000
+	}
+
+	# everything else: the Terminal (pages, assets, server functions)
+	reverse_proxy 127.0.0.1:8080
+
+	log {
+		output file /var/log/caddy/terminal.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

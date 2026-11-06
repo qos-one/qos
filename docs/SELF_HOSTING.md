@@ -1,0 +1,101 @@
+# Running QOS on your own server
+
+This guide puts the QOS engine (API, strategy nodes, Redis, IB Gateway) on a Linux server you control, so strategies
+keep trading when your computer is off. You choose how to open the Terminal:
+
+| | A. SSH tunnel | B. Web Terminal on your domain |
+|---|---|---|
+| Open the Terminal | desktop app on your computer, through `ssh -L` | any browser, `https://terminal.<your-domain>` |
+| Open ports | SSH only | SSH, 80, 443 |
+| You need | an SSH key for the server | a domain, plus everything in A |
+
+Start with **paper trading**. QOS is software, not advice: you are responsible for every order it sends.
+
+## What you need
+
+- A VPS with Ubuntu 24.04 or newer, 4 CPU cores and 8 GB RAM (2 cores / 4 GB runs one or two nodes), 40 GB disk.
+- SSH access with a key (`ssh-copy-id you@server`). Turn password logins off once the key works.
+- An Interactive Brokers account; a paper account for testing.
+- Option B: a domain, and a DNS **A record** such as `terminal.example.com` → the server's IP. Check it with
+  `dig +short terminal.example.com` before installing.
+
+## Install
+
+On the server:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/qos-one/qos/main/deploy/install.sh
+less install.sh                     # read it first: it runs as root
+```
+
+Option A:
+
+```bash
+sudo bash install.sh
+```
+
+Option B:
+
+```bash
+sudo QOS_TERMINAL_DOMAIN=terminal.example.com ACME_EMAIL=you@example.com bash install.sh
+```
+
+Add `QOS_ALLOW_IPS="203.0.113.7/32"` to let only your own addresses open the web Terminal.
+
+The script installs Docker, git, a C compiler and uv; creates the user `qos`; puts the code in `/srv/qos/engine/bot`
+and your data in `/srv/qos/home`; starts Redis and the services (`qos-api`, `qos-catalog.timer`,
+`qos-watchdog.timer`, and `qos-terminal` for option B); turns on the firewall (SSH, plus 80/443 for option B); and,
+for option B, downloads the web Terminal from the
+[qos-terminal releases](https://github.com/qos-one/qos-terminal/releases) (checksum verified) and sets up Caddy for
+HTTPS. At the end it asks for the first admin name and a PIN (8+ characters for option B). The PIN is typed on the
+server and never leaves it.
+
+## First sign-in
+
+1. Open the Terminal:
+   - A: on your computer, keep a tunnel open and start the Terminal (see the
+     [qos-terminal README](https://github.com/qos-one/qos-terminal)):
+     ```bash
+     ssh -N -L 8000:127.0.0.1:8000 -L 5901:127.0.0.1:5901 you@server
+     ```
+   - B: open `https://terminal.example.com`.
+2. Sign in with the admin PIN.
+3. Step **IBKR gateway**: enter your IBKR username and password and choose *paper*. QOS starts an IB Gateway
+   container on the server ([gnzsnz/ib-gateway](https://github.com/gnzsnz/ib-gateway-docker), a third-party image)
+   with your login stored in `/srv/qos/home/ibgw` (readable by `qos` only). Approve the login in IBKR Mobile if asked.
+4. Step **Account**: pick the account. Check the Reconcile tab, then start a strategy node.
+
+To see the IB Gateway screen (rare: a login prompt that needs a click), use the tunnel from option A and connect a VNC
+viewer to `localhost:5901`.
+
+## Day to day
+
+| Task | Command (on the server) |
+|---|---|
+| Update QOS | `sudo bash install.sh` again (with the same settings). Running nodes keep trading. |
+| API log | `sudo -u qos XDG_RUNTIME_DIR=/run/user/$(id -u qos) journalctl --user -u qos-api -n 100` |
+| Node logs | `/srv/qos/home/data/logs` |
+| Add an operator | sign in as admin → Risk → Security, or `qos operator add` (see below) |
+| Reset a PIN | `sudo -u qos bash -c 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen python -m qos.cli operator pin <id>'` |
+| Back up | `/srv/qos/home` holds everything (data, configs, strategies, `.env`): copy it while the API is stopped |
+
+- IB Gateway restarts every night (23:55 New York) and IBKR asks for a fresh login about once a week.
+- After a node restarts it starts flat; the "After a node restart" section of [deploy/README.md](../deploy/README.md)
+  shows how to line up the books.
+- Never run the test suite on the server while nodes trade.
+
+## Security notes
+
+- Only SSH (and 80/443 for option B) are open. The API, Redis, IB Gateway and VNC listen on 127.0.0.1.
+- Option B runs with `QOS_PUBLIC_TERMINAL=1`: nothing works until an operator exists, the first admin can only be
+  created on the server, PINs are 8+ characters, sign-in locks after repeated failures, every browser has its own
+  session (HttpOnly cookie) and the live stream needs a signed-in operator.
+- The web Terminal can send orders to your broker. Use a long PIN, keep your domain to yourself, and prefer
+  `QOS_ALLOW_IPS` when you use it from fixed places.
+- Live trading: the Terminal asks for a separate live confirmation code. Stay on paper until you trust your setup.
+
+## License
+
+QOS is AGPL-3.0-only (the SDK is Apache-2.0). If you change QOS and let other people use it over a network (for
+example a web Terminal for your team), you must offer them the source code of your version. Running it for yourself
+needs nothing. This is a summary, not legal advice; the [LICENSE](../LICENSE) is what counts.
