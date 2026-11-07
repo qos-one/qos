@@ -105,6 +105,9 @@ def make_adapter(cls, Config):
             if want_side == 0:
                 return self.sdk_target(0)
             if cur_side != want_side:
+                if self.market_closed():
+                    self._blocked(bar, "market closed — no orders until the FX open (Sunday 17:00 New York)")
+                    return False
                 if cur_side != 0:
                     self.cancel_all_orders(self.config.instrument_id)
                     self.close_all_positions(self.config.instrument_id)
@@ -117,6 +120,9 @@ def make_adapter(cls, Config):
                 return False
             delta = abs(qty) - abs(cur)
             if abs(delta) < 1e-9:
+                return False
+            if self.market_closed():
+                self._blocked(bar, "market closed — no orders until the FX open (Sunday 17:00 New York)")
                 return False
             if delta > 0:
                 if not self._enter(OrderSide.BUY if want_side > 0 else OrderSide.SELL, bar, qty_value=delta, brackets=False):

@@ -11,11 +11,12 @@ Every Strategy gets:
 from __future__ import annotations
 
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar, BarType
-from nautilus_trader.model.enums import OrderSide, TimeInForce
+from nautilus_trader.model.enums import OrderSide, OrderType, TimeInForce
 from nautilus_trader.model.events import PositionClosed
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
@@ -30,6 +31,23 @@ def P(key: str, label: str, typ: str, default, lo=None, hi=None, step=None, fiel
     """One parameter definition: key = config JSON key, field = Config attribute name (if different)"""
     return {"key": key, "field": field or key, "label": label, "type": typ, "default": default,
             "min": lo, "max": hi, "step": step, "help": help}
+
+
+NY = ZoneInfo("America/New_York")
+
+
+def fx_market_open(ts_ns: int) -> bool:
+    """IDEALPRO FX trades from Sunday 17:00 to Friday 17:00 New York time. Orders sent outside that wait at IBKR and
+    pile up (a strategy re-sends every bar because its position never changes), then all fill at the open."""
+    t = pd.Timestamp(ts_ns, unit="ns", tz="UTC").tz_convert(NY)
+    wd = t.weekday()                                    # Monday = 0 … Sunday = 6
+    if wd == 5:
+        return False
+    if wd == 4 and t.hour >= 17:
+        return False
+    if wd == 6 and t.hour < 17:
+        return False
+    return True
 
 
 def pip_size(instrument_id: InstrumentId) -> float:
@@ -134,6 +152,35 @@ class QXBaseStrategy(Strategy):
             "action": self.actions[-1][1] if len(self.actions) > n_actions_before else None,
         })
 
+    def market_closed(self) -> bool:
+        """Live only (the API risk feed is required there): FX outside trading hours. Backtests are never blocked, so
+        their results and the parity checks stay exactly as before."""
+        if not risk.STATE.require_sync or self.config.instrument_id.venue.value != "IDEALPRO":
+            return False
+        return not fx_market_open(self.clock.timestamp_ns())
+
+    def stale_entries(self, bar: Bar) -> list:
+        """Entry market orders of this strategy from an earlier bar that are still working (not filled, not cancelled).
+        Orders sent on this bar (a close plus a new entry when reversing), reduce-only closes and bracket SL/TP legs
+        are not counted."""
+        iid, seen, out = self.config.instrument_id, set(), []
+        for o in list(self.cache.orders_open(instrument_id=iid, strategy_id=self.id)) + list(self.cache.orders_inflight(instrument_id=iid, strategy_id=self.id)):
+            cid = o.client_order_id.value
+            if cid in seen:
+                continue
+            seen.add(cid)
+            if o.order_type == OrderType.MARKET and not o.is_reduce_only and o.ts_init < bar.ts_event:
+                out.append(o)
+        return out
+
+    def _blocked(self, bar: Bar, why: str, order_side: OrderSide | None = None, qty=None) -> None:
+        n = risk.note_block(why)
+        if n == 1 or n % 20 == 0:
+            self.log.warning(f"entry blocked: {why}")
+        self.msgbus.publish(topic=f"qx.risk.{self.id}", msg={"event": "blocked", "reason": why, "side": order_side.name if order_side else "",
+                                                            "ts_ns": bar.ts_event, "qty": float(qty) if qty is not None else 0.0,
+                                                            "instrument": str(self.config.instrument_id)})
+
     def go_to(self, target: int, bar: Bar) -> None:
         """Move to the target position: +1 Long, −1 Short, 0 Flat (allow_short=False → −1 becomes 0)"""
         if target < 0 and not self.config.allow_short:
@@ -141,6 +188,9 @@ class QXBaseStrategy(Strategy):
         net = self.net()
         cur = (net > 0) - (net < 0)
         if target == cur:
+            return
+        if self.market_closed():                              # neither close nor open: orders would wait at IBKR and pile up
+            self._blocked(bar, "market closed — no orders until the FX open (Sunday 17:00 New York)")
             return
         iid = self.config.instrument_id
         if cur != 0:
@@ -195,6 +245,13 @@ class QXBaseStrategy(Strategy):
     def _enter(self, order_side: OrderSide, bar: Bar, qty_value=None, brackets: bool = True) -> bool:
         """Open/add to a position (risk-checked) — Market, or bracket if SL/TP is set"""
         qty = self.instrument.make_qty(qty_value if qty_value is not None else self.config.trade_size)
+        if self.market_closed():
+            self._blocked(bar, "market closed — no orders until the FX open (Sunday 17:00 New York)", order_side, qty)
+            return False
+        stale = self.stale_entries(bar)
+        if stale:
+            self._blocked(bar, f"order pending: {len(stale)} earlier entry order(s) not filled yet ({stale[0].client_order_id.value})", order_side, qty)
+            return False
         if not self.risk_ok(order_side, qty, bar):
             return False
         if not self.package_ok(order_side, qty, bar):
