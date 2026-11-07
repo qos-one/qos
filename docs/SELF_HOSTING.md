@@ -80,8 +80,10 @@ viewer to `localhost:5901`.
 | Back up | `/srv/qos/home` holds everything (data, configs, strategies, `.env`): copy it while the API is stopped |
 
 - IB Gateway restarts every night (23:55 New York) and IBKR asks for a fresh login about once a week.
-- After a node restarts it starts flat; the "After a node restart" section of [deploy/README.md](../deploy/README.md)
-  shows how to line up the books.
+- Stopping a node cancels its orders and, while the market is open, closes the positions it opened. With FX closed
+  (Friday 17:00 to Sunday 17:00 New York) positions are kept and strategies send no orders.
+- After a node restarts it starts flat and does not know older positions; the "After a node restart" section of
+  [deploy/README.md](../deploy/README.md) shows how to line up the books.
 - Never run the test suite on the server while nodes trade.
 
 ## Security notes

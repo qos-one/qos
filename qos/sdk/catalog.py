@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-TF_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30}
+TF_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}
 
 
 def default_dir() -> Path:

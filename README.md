@@ -44,6 +44,13 @@ uv run uvicorn api.server:app --port 8000
 Check it is up with `curl localhost:8000/health`, then open the QOS Terminal. Without
 `QOS_HOME`, QOS keeps its files next to the code (`data/`, `configs/`, `reports/`).
 
+## QOS Cloud
+
+The `qos login`, `qos store`, `qos data pull` and other Cloud commands are clients for a hosted service that is not open
+to the public yet: this release points them at `http://localhost:8090` and ships no production signing keys, so they do
+nothing outside a development setup. Everything else (engine, Terminal, strategies, backtests, live trading on your own
+IBKR account) works without it.
+
 ## Run it on a server
 
 To keep strategies trading while your computer is off, install QOS on your own Linux server with one script, then

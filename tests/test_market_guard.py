@@ -99,3 +99,50 @@ def test_orders_that_do_not_block(live, o):
         o.ts_init = t
     f = Fake(t, [o])
     assert f._enter(OrderSide.BUY, NS(ts_event=t, close=1.11)) is True and len(f.submitted) == 1
+
+
+# ---------- on_stop ----------
+class StopFake(Fake):
+    def __init__(self, now_ns, net):
+        super().__init__(now_ns)
+        self._net = net
+        self.config = NS(**vars(self.config), close_positions_on_stop=True, bar_type="EUR/USD.IDEALPRO-5-MINUTE-MID-INTERNAL")
+        self.calls = []
+        self.cancel_all_orders = lambda iid: self.calls.append("cancel")
+        self.close_all_positions = lambda iid: self.calls.append("close")
+        self.unsubscribe_bars = lambda bt: self.calls.append("unsub")
+    net = lambda self: self._net
+    on_stop = QXBaseStrategy.on_stop
+
+
+def test_stop_keeps_position_when_fx_closed(live):
+    f = StopFake(ns("2026-11-07 10:00"), -20000.0)
+    f.on_stop()
+    assert f.calls == ["cancel", "unsub"] and f.published[0]["event"] == "kept_on_stop" and "market closed" in f.warnings[0]
+
+
+def test_stop_closes_position_when_market_open(live):
+    f = StopFake(ns("2026-11-09 10:00"), -20000.0)
+    f.on_stop()
+    assert f.calls == ["cancel", "close", "unsub"] and not f.published
+
+
+def test_backtest_stop_always_closes(monkeypatch):
+    monkeypatch.setattr(risk.STATE, "require_sync", False)
+    f = StopFake(ns("2026-11-07 10:00"), 20000.0)
+    f.on_stop()
+    assert "close" in f.calls
+
+
+# ---------- SDK timeframe 1h · qos --version ----------
+def test_sdk_accepts_1h():
+    from qos.sdk import strategy as s
+    from qos.sdk.catalog import TF_MINUTES
+    assert s.TIMEFRAMES["1h"] == 60 and TF_MINUTES["1h"] == 60
+
+
+def test_cli_version(capsys):
+    from qos import cli
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--version"])
+    assert e.value.code == 0 and capsys.readouterr().out.strip().startswith("qos 0.1.")

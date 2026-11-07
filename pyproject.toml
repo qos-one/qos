@@ -1,6 +1,6 @@
 [project]
 name = "qos"
-version = "0.1.0"
+version = "0.1.1"
 description = "QOS - the Quant Operating System: engine, local API and command-line tools"
 readme = "README.md"
 license = "AGPL-3.0-only AND Apache-2.0"

@@ -677,9 +677,19 @@ def cmd_cloud(a) -> int:
     return 0
 
 
+def qos_version() -> str:
+    """Version from pyproject.toml of this checkout (the installed package name differs between repos)"""
+    try:
+        import tomllib
+        return tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())["project"]["version"]
+    except Exception:
+        return "unknown"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="qos", description="QOS — Quant Operating System")
     ap.add_argument("--api", default=DEFAULT_API, help="QOS API url (default %(default)s)")
+    ap.add_argument("--version", action="version", version=f"qos {qos_version()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("install", help="check and install a strategy package")
     p.add_argument("source", help="folder with strategy.py, a single strategy.py, or a git url (git+https://…#subdir)")
@@ -709,7 +719,7 @@ def main(argv=None) -> int:
     dsub = p.add_subparsers(dest="data_cmd", required=True)
     p = dsub.add_parser("export", help="export bars to one parquet file (for developers without QOS)")
     p.add_argument("instrument", help="EUR/USD, GBPUSD, …")
-    p.add_argument("tf", help="1m, 5m, 15m, 30m")
+    p.add_argument("tf", help="1m, 5m, 15m, 30m, 1h")
     p.add_argument("-o", "--output", required=True)
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--start", default=None)

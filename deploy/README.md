@@ -31,8 +31,10 @@ The bot API, the Nautilus nodes, Redis and IB Gateway run on the server. The Ter
 
 ## Phase 2 — cut-over (weekend, FX closed; about 1–2 hours)
 
-Starting the nodes on the server resets their soak count. Nodes start flat: stopping a node does not close its position, and a
-restarted node does not take it over (see [After a node restart](#after-a-node-restart-align-the-books)).
+Starting the nodes on the server resets their soak count. Stopping a node closes only the positions it opened and still knows
+about, and only while the market is open (FX closed: the position is kept). A node that was restarted earlier starts flat and
+does not know older positions, so they stay at IBKR; a restarted node never takes a position over
+(see [After a node restart](#after-a-node-restart-align-the-books)).
 
 1. Mac, Terminal: note open positions (Positions tab / Reconcile), then stop every node. Their open positions stay at IBKR;
    close them first if you do not want to carry them as manual positions.

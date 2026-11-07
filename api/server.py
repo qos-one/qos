@@ -4111,7 +4111,7 @@ async def close_position(key: str, force: bool = False):
     k = f"{mkt}:{sym}"
     owners = _node_owners(k)
     if owners and not force:
-        raise HTTPException(409, f"{k} is held by running node {', '.join(owners)} — stop the node first (it closes its positions), or close with force=true")
+        raise HTTPException(409, f"{k} is held by running node {', '.join(owners)} — stop the node first (it closes the positions it opened while the market is open), or close with force=true")
     _claim_flatten(k)
     try:
         c = await contract_for(k)

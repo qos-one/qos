@@ -2,7 +2,7 @@
 
 Thank you for helping build the open-source Quant Operating System. This repository holds the
 engine, the local API used by the QOS Terminal, the `qos` command-line tool and the developer kit.
-The Terminal itself lives in the `dashboard` repository.
+The Terminal itself lives in the `qos-terminal` repository.
 
 ## Ways to help
 

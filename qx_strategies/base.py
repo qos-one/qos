@@ -116,9 +116,21 @@ class QXBaseStrategy(Strategy):
         self.subscribe_bars(self.config.bar_type)
 
     def on_stop(self) -> None:
-        self.cancel_all_orders(self.config.instrument_id)
+        """Cancel this strategy's orders, then close the positions it holds (close_positions_on_stop, default on).
+        Only what this node knows: after a restart it starts flat, so older positions are not closed here.
+        Live with FX closed the position is kept: a market close would wait at IBKR and fill unseen at the open."""
+        iid = self.config.instrument_id
+        self.cancel_all_orders(iid)
         if self.config.close_positions_on_stop:
-            self.close_all_positions(self.config.instrument_id)
+            if self.market_closed():
+                net = self.net()
+                if net:
+                    why = f"position kept on stop: market closed ({net:+,.0f} {iid}) — close it in the Terminal after the open"
+                    self.log.warning(why)
+                    self.msgbus.publish(topic=f"qx.risk.{self.id}", msg={"event": "kept_on_stop", "reason": why, "qty": net,
+                                                                        "ts_ns": self.clock.timestamp_ns(), "instrument": str(iid)})
+            else:
+                self.close_all_positions(iid)
         self.unsubscribe_bars(self.config.bar_type)
 
     def on_reset(self) -> None:

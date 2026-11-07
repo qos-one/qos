@@ -57,7 +57,7 @@ class MyEma(Strategy):
     name = "my_ema"                 # a-z 0-9 _ · must match the installed folder name
     version = "0.1.0"               # MAJOR.MINOR.PATCH
     instruments = ["EUR/USD"]       # orders only for declared instruments
-    timeframe = "5m"                # 1m 5m 15m 30m
+    timeframe = "5m"                # 1m 5m 15m 30m 1h
     summary = "EMA {fast}/{slow}"
 
     fast = Param(10, min=2, max=100, grid=[10, 20])
@@ -88,7 +88,7 @@ print(r["pnl_usd"], r["closed_positions"], r["max_drawdown_usd"])
 ```
 
 Data: on the QOS machine run `qos data export EUR/USD 5m --days 365 -o eurusd_5m.parquet` and send the file to the developer
-(the file records the instrument / timeframe · 5m is resampled to 15m/30m automatically).
+(the file records the instrument / timeframe · 5m is resampled to 15m/30m/1h automatically).
 
 Data from the QOS Cloud data store: `qos login` → `qos data list` → `qos data pull fx-1m`, then use `catalog.bars("EUR/USD", "5m", source="cloud:fx-1m")` · available according to your account's entitlements (works offline for 7 days).
 
@@ -101,7 +101,7 @@ Data from the QOS Cloud data store: `qos login` → `qos data list` → `qos dat
 | `name`, `version` | — | Package identity `name@version` |
 | `label`, `description`, `summary` | — | Shown in the Terminal · `summary` may use `{param}` |
 | `instruments` | — | FX on IDEALPRO, e.g. `"EUR/USD"` · orders outside this list are rejected |
-| `timeframe` | `"5m"` | `1m` `5m` `15m` `30m` |
+| `timeframe` | `"5m"` | `1m` `5m` `15m` `30m` `1h` |
 | `requires` | `[]` | pip requirements → QOS creates a separate venv (`<package>/.venv`) |
 | `timer_interval_s` | `0` | > 0 → `on_timer` is called every N seconds |
 | `max_drawdown_pct` | `10` | Drawdown ceiling for the backtest criteria (% of 100,000 capital) |
@@ -121,7 +121,16 @@ values the user edits in the Terminal are node overrides (the package is not cha
 | `on_start()` | Once at start | Create indicators, `self.load_model()` |
 | `on_bar(bar)` | Every closed bar | Decide → `self.target(...)` · `float(bar.close)` |
 | `on_timer(interval_s)` | Every `timer_interval_s` | Work not tied to bars |
-| `on_stop()` | Node stops | Clean up (QOS cancels orders and closes positions for you) |
+| `on_stop()` | Node stops | Clean up. Afterwards QOS cancels the strategy's orders and, while the market is open, closes the positions this node opened (see [When a node stops](#when-a-node-stops)) |
+
+### When a node stops
+
+- QOS cancels the strategy's working orders.
+- While the market is open it closes the positions this node opened (`close_positions_on_stop`, on by default).
+- With FX closed (Friday 17:00 to Sunday 17:00 New York) the position is kept and the Terminal shows why; strategies
+  also send no new orders in that window, and never stack a new entry on an earlier one that has not filled.
+- A node that restarts starts flat and does not know positions from before; QOS pauses its new entries until an
+  operator confirms the positions in the Terminal.
 
 ### Services
 
@@ -193,7 +202,7 @@ Examples: `rsi_reversion` in [qos-examples](https://github.com/qos-one/qos-examp
 
 ## 9. Known limits
 
-- FX on IBKR IDEALPRO only, timeframe ≤ 30m, one instrument per strategy per node
+- FX on IBKR IDEALPRO only, timeframe ≤ 1h, one instrument per strategy per node
 - The lookahead check only catches direct use of future bars
 - Nodes still receive the IB Gateway host/port (no credential proxy yet) — limits are enforced mainly in the SDK/node
 - The file-write restriction covers Python code only (it is not an OS-level sandbox)

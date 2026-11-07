@@ -23,7 +23,7 @@ from .params import Param, ParamValues
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
-TIMEFRAMES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30}
+TIMEFRAMES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}
 INDICATORS = {"ema": "ExponentialMovingAverage", "sma": "SimpleMovingAverage", "atr": "AverageTrueRange",
               "rsi": "RelativeStrengthIndex", "bollinger": "BollingerBands"}
 
@@ -67,7 +67,7 @@ class Strategy:
         """Called on every bar (bar.open/high/low/close are Price · use float(bar.close)) — decide, then call self.target(...)"""
 
     def on_stop(self) -> None:
-        """Called when the node stops (QOS closes positions and cancels orders for you)"""
+        """Called when the node stops. Afterwards QOS cancels this strategy's orders and, while the market is open, closes the positions this node opened (a restarted node does not know older positions; with FX closed positions are kept)."""
 
     def on_timer(self, interval_s: float) -> None:
         """Called every timer_interval_s seconds (if set) — for work not tied to bars, e.g. reloading a model"""
