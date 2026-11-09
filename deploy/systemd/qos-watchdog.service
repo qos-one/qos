@@ -5,5 +5,5 @@ Description=QOS watchdog (API / Redis / IB Gateway checks, Telegram alerts)
 Type=oneshot
 WorkingDirectory=/srv/qos/engine/bot
 EnvironmentFile=/srv/qos/deploy.env
-ExecStart=/srv/qos/engine/bot/.venv/bin/python scripts/watchdog.py --api-unit qos-api.service --port 8000
-TimeoutStartSec=50
+ExecStart=/srv/qos/engine/bot/.venv/bin/python scripts/watchdog.py --api-unit qos-api.service --port 8000 --ibgw-dir /srv/qos/home/ibgw
+TimeoutStartSec=90

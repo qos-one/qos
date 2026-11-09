@@ -141,6 +141,17 @@ def test_sdk_accepts_1h():
     assert s.TIMEFRAMES["1h"] == 60 and TF_MINUTES["1h"] == 60
 
 
+def test_hour_bars_use_nautilus_hour_type():
+    """Nautilus rejects "60-MINUTE"; one hour must be a 1-HOUR bar type (backtest, catalog and live aggregation)"""
+    from nautilus_trader.model.data import BarType
+    from qx_strategies import bar_type_str
+    assert bar_type_str("EUR/USD.IDEALPRO", 60, "INTERNAL") == "EUR/USD.IDEALPRO-1-HOUR-MID-INTERNAL"
+    assert bar_type_str("EUR/USD.IDEALPRO", 30) == "EUR/USD.IDEALPRO-30-MINUTE-MID-EXTERNAL"
+    BarType.from_str(bar_type_str("EUR/USD.IDEALPRO", 60))
+    from qos.sdk.testing import synthetic_bars
+    assert len(synthetic_bars("EUR/USD.IDEALPRO", 60, n=100)) == 100
+
+
 def test_cli_version(capsys):
     from qos import cli
     with pytest.raises(SystemExit) as e:

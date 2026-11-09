@@ -7,5 +7,5 @@ WorkingDirectory=/srv/qos/engine/bot
 EnvironmentFile=/srv/qos/deploy.env
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.local/bin/uv run --frozen scripts/build_catalog.py --update
-TimeoutStartSec=1h
+TimeoutStartSec=20min
 Nice=10

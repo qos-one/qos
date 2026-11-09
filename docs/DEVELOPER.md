@@ -125,7 +125,8 @@ values the user edits in the Terminal are node overrides (the package is not cha
 
 ### When a node stops
 
-- QOS cancels the strategy's working orders.
+- QOS cancels the strategy's working orders. Afterwards the engine checks IBKR: any order of that node still working
+  is cancelled under the node's own IBKR client ID, and the Terminal (and Telegram, when set up) warns if one survives.
 - While the market is open it closes the positions this node opened (`close_positions_on_stop`, on by default).
 - With FX closed (Friday 17:00 to Sunday 17:00 New York) the position is kept and the Terminal shows why; strategies
   also send no new orders in that window, and never stack a new entry on an earlier one that has not filled.

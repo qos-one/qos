@@ -124,7 +124,9 @@ def resolve_ref(ref: str) -> str:
 
 def bar_type_str(instrument: str, tf_minutes: int, source: str = "EXTERNAL") -> str:
     """EXTERNAL = prebuilt bars (catalog/IBKR historical) · INTERNAL = Nautilus aggregates bars from quotes in live"""
-    return f"{instrument}-{int(tf_minutes)}-MINUTE-MID-{source}"
+    m = int(tf_minutes)
+    step = f"{m // 60}-HOUR" if m >= 60 and m % 60 == 0 else f"{m}-MINUTE"     # Nautilus rejects "60-MINUTE": hours are HOUR bars
+    return f"{instrument}-{step}-MID-{source}"
 
 
 def load_config(path: str | Path) -> dict:

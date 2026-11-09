@@ -37,6 +37,15 @@ def _num(x):
         return None
 
 
+def _side(p) -> str:
+    """LONG / SHORT / FLAT — Position has no side_string(); str(p.side) is the enum number ("3" = SHORT)"""
+    from nautilus_trader.model.enums import position_side_to_str
+    try:
+        return position_side_to_str(p.side)
+    except Exception:
+        return str(p.side)
+
+
 def _clean(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None and v != ""}
 
@@ -219,8 +228,9 @@ class QXEventBridge(Actor):
                 upnl = float(m.as_double()) if m is not None else None
             except Exception:
                 pass
-            positions.append(_clean({"instrument": str(p.instrument_id), "strategy": str(p.strategy_id), "side": p.side_string() if hasattr(p, "side_string") else str(p.side),
-                                     "qty": float(p.quantity), "avg_px": float(p.avg_px_open), "unrealized_pnl": upnl}))
+            positions.append(_clean({"instrument": str(p.instrument_id), "strategy": str(p.strategy_id), "side": _side(p),
+                                     "qty": float(p.quantity), "signed_qty": float(p.signed_qty),
+                                     "avg_px": float(p.avg_px_open), "unrealized_pnl": upnl}))
         realized = 0.0
         for p in self.cache.positions():
             try:

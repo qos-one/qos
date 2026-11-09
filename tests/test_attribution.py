@@ -102,3 +102,17 @@ def test_annotate_positions():
     assert rows[0]["source"] == "mixed" and rows[0]["recon"] == "ok"
     assert [s["source"] for s in rows[0]["sources"]] == ["node:ema_eurusd", "manual"]
     assert rows[1]["source"] == "agent:ema_cross" and rows[1]["recon"] == "external"
+
+
+def test_heartbeat_short_side_from_old_and_new_nodes():
+    """Nodes sent str(PositionSide.SHORT) = "3" (Position has no side_string): a short must not count as long"""
+    from types import SimpleNamespace as NS
+    from nautilus_trader.model.enums import PositionSide
+    from qx_strategies.events import _side
+    for side in ("SHORT", "3", "PositionSide.SHORT"):
+        assert attr.node_positions({"n": _live(20000.0, side=side)})["FX:EURUSD"]["n"]["qty"] == -20000.0
+    assert attr.node_positions({"n": _live(20000.0, side="2")})["FX:EURUSD"]["n"]["qty"] == 20000.0
+    lv = _live(20000.0, side="LONG")
+    lv["positions"][0]["signed_qty"] = -20000.0
+    assert attr.node_positions({"n": lv})["FX:EURUSD"]["n"]["qty"] == -20000.0
+    assert _side(NS(side=PositionSide.SHORT)) == "SHORT" and _side(NS(side=PositionSide.LONG)) == "LONG"

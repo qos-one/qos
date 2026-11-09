@@ -72,13 +72,23 @@ def _fresh(lv: dict | None) -> bool:
     return age is not None and age <= HEARTBEAT_STALE_S
 
 
+SHORT_SIDES = ("SHORT", "3", "POSITIONSIDE.SHORT")    # nodes before the events.py fix sent str(PositionSide) = "3"
+
+
+def heartbeat_qty(p: dict) -> float:
+    """Signed quantity of one heartbeat position (Nautilus Position.quantity is unsigned)"""
+    if p.get("signed_qty") is not None:
+        return float(p["signed_qty"])
+    return float(p.get("qty") or 0) * (-1 if str(p.get("side", "")).upper() in SHORT_SIDES else 1)
+
+
 def node_positions(live: dict[str, dict]) -> dict[str, dict[str, dict]]:
     """{key: {node: {qty (signed), strategy}}} from each node's latest heartbeat"""
     out: dict[str, dict[str, dict]] = {}
     for node, lv in live.items():
         for p in (lv or {}).get("positions") or []:
             k = nautilus_to_key(p.get("instrument"))
-            q = float(p.get("qty") or 0) * (-1 if str(p.get("side", "")).upper() == "SHORT" else 1)
+            q = heartbeat_qty(p)
             if not k or abs(q) <= tol(q):
                 continue
             d = out.setdefault(k, {}).setdefault(node, {"qty": 0.0, "strategy": p.get("strategy", "")})

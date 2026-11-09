@@ -85,6 +85,35 @@ def test_watchdog_kickstarts_then_alerts_then_recovers():
     assert len(acts) == 1 and "IB Gateway" in acts[0][1]              # 10 minutes, notified once
 
 
+def test_watchdog_restarts_gateway_at_10_and_25_min():
+    import watchdog as wd
+    st, acts = {}, []
+    for i in range(30):
+        acts += wd.step(st, {"api": True, "redis": True, "gateway": False}, 3000 + 60 * i, restart_gateway=True)
+    assert [a[0] for a in acts] == ["restart_gateway", "alert", "restart_gateway", "alert"]
+    assert "10 min" in acts[1][1] and "IBKR Mobile" in acts[3][1]
+    acts = wd.step(st, {"api": True, "redis": True, "gateway": True}, 9000, restart_gateway=True)
+    assert acts[0][0] == "alert" and "back" in acts[0][1]
+
+
+def test_ib_ok_handshake(monkeypatch):
+    import struct
+    import watchdog as wd
+
+    class Sock:
+        def __init__(self, reply): self.reply, self.sent = reply, b""
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def settimeout(self, t): pass
+        def sendall(self, b): self.sent += b
+        def recv(self, n): return self.reply[:n]
+    logged_in = struct.pack(">I", 22) + b"187\x0020261109 12:00:00\x00"
+    monkeypatch.setattr(wd.socket, "create_connection", lambda a, timeout=0: Sock(logged_in))
+    assert wd.ib_ok("127.0.0.1", 4004)
+    monkeypatch.setattr(wd.socket, "create_connection", lambda a, timeout=0: Sock(b""))    # socat, nothing behind it
+    assert not wd.ib_ok("127.0.0.1", 4004)
+
+
 def test_watchdog_run_once_writes_state(tmp_path, monkeypatch):
     import watchdog as wd
     monkeypatch.setenv("QOS_DATA_DIR", str(tmp_path))

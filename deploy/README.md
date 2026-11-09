@@ -98,6 +98,13 @@ cash balance instead, so the nightly restart needs no action.
 ## Day to day
 
 - IB Gateway restarts itself every night (`AUTO_RESTART_TIME`). About once a week IBKR asks for a new login: approve it in IBKR Mobile, or nodes stop trading.
+- IB Gateway restart time: `AUTO_RESTART_TIME=05:05 PM` with `TIME_ZONE=America/New_York` in `/srv/qos/home/ibgw/.env`,
+  five minutes after the FX day rolls over (05:05 Thailand time in winter, 04:05 in summer), when there is almost no trading.
+- If the gateway is still not logged in 10 minutes later (stuck at a dialog after its restart), `qos-watchdog` runs
+  `docker compose restart` in `/srv/qos/home/ibgw`, and once more at 25 minutes; the Terminal warns at 15 minutes.
+  By hand: `ssh ENGINE 'cd /srv/qos/home/ibgw && docker compose restart'` (nodes reconnect by themselves).
+- The hourly catalog update skips while FX is closed once the catalog holds bars up to the Friday close, and gives up
+  after 20 minutes instead of hanging.
 - Tunnel in the background (starts at login, reconnects by itself): `QOS_ENGINE_HOST=ENGINE deploy/tunnel-autostart.sh install`; `deploy/tunnel-autostart.sh status` to check, `uninstall` to remove.
 - See the IB Gateway screen: tunnel open, then Finder → Go → Connect to Server → `vnc://localhost:5901`.
 - Update the code: `RESTART=1 QOS_ENGINE_HOST=ENGINE deploy/deploy-engine.sh` (nodes keep running; the API adopts them after the restart).

@@ -242,8 +242,8 @@ def test_assistant_may_not_switch_mode_or_force_close(srv, monkeypatch):
 
 
 def test_close_all_cancels_selected_account_orders_only(srv, monkeypatch):
-    mine = NS(order=NS(orderId=1, account="DU1"), contract=Forex("EURUSD"))
-    other = NS(order=NS(orderId=2, account="DU2"), contract=Forex("EURUSD"))
+    mine = NS(order=NS(orderId=1, account="DU1", clientId=60), contract=Forex("EURUSD"))
+    other = NS(order=NS(orderId=2, account="DU2", clientId=60), contract=Forex("EURUSD"))
     fake = FakeIB(trades=[mine, other])
     cancelled = []
     fake.cancelOrder = lambda o: cancelled.append(o.orderId)

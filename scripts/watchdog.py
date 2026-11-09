@@ -3,10 +3,13 @@ QOS watchdog (step 15) — run by launchd every 60 seconds, separate from the AP
 
   api      /health fails 3 times in a row → launchctl kickstart -k <api label> (macOS) or systemctl --user restart <api unit> (Linux) · still failing 3 more times → Telegram (sent directly, not via the API)
   redis    port unreachable for 3 minutes → Telegram
-  gateway  selected IB Gateway port unreachable for 10 minutes → Telegram (the gateway's nightly self-restart takes only a few minutes)
+  gateway  IB Gateway not logged in for 10 minutes → Telegram (the gateway's nightly self-restart takes only a few minutes).
+           Checked with the IB API handshake, not a plain port check: the gnzsnz container's socat accepts the port even
+           while the gateway is stuck at a login dialog. With --ibgw-dir: docker compose restart at 10 min, again at 25 min
   one alert per incident, plus one on recovery · latest status is written to data/watchdog.json (Terminal › System)
 
   python scripts/watchdog.py --api-label com.qos-api [--port 8000] [--once]
+  python scripts/watchdog.py --api-unit qos-api.service --ibgw-dir /srv/qos/home/ibgw      (Linux server)
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import argparse
 import json
 import os
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -26,6 +30,7 @@ from qos import paths  # noqa: E402
 
 THRESHOLDS = {"api": 3, "redis": 3, "gateway": 10}         # consecutive rounds (1 round = 1 minute)
 API_ALERT_AFTER = 6                                        # kickstart at round 3 · still down at round 6 = alert
+GATEWAY_RETRY_AT = 25                                      # second gateway restart (minutes down), with --ibgw-dir
 
 
 def read_env() -> dict:
@@ -52,6 +57,20 @@ def tcp_ok(host: str, port: int, timeout: float = 3.0) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
+    except OSError:
+        return False
+
+
+def ib_ok(host: str, port: int, timeout: float = 5.0) -> bool:
+    """IB API handshake: a logged-in gateway answers with its server version. A gateway stuck at a dialog (or the
+    container's socat with nothing behind it) accepts the TCP connection, then closes it or stays silent"""
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            v = b"v100..187"
+            s.sendall(b"API\0" + struct.pack(">I", len(v)) + v)
+            head = s.recv(4)
+            return len(head) == 4 and 0 < struct.unpack(">I", head)[0] < 1000
     except OSError:
         return False
 
@@ -90,8 +109,8 @@ def telegram(env: dict, text: str) -> bool:
         return False
 
 
-def step(state: dict, results: dict[str, bool | None], now: float) -> list[tuple[str, str]]:
-    """Update counters → list of actions: ("kickstart", "") · ("alert", message) — pure logic (testable)"""
+def step(state: dict, results: dict[str, bool | None], now: float, restart_gateway: bool = False) -> list[tuple[str, str]]:
+    """Update counters → list of actions: ("kickstart", "") · ("restart_gateway", "") · ("alert", message) — pure logic (testable)"""
     actions = []
     for name, ok in results.items():
         s = state.setdefault(name, {"fails": 0, "alerted": False, "since": None})
@@ -110,6 +129,15 @@ def step(state: dict, results: dict[str, bool | None], now: float) -> list[tuple
             if s["fails"] >= API_ALERT_AFTER and not s["alerted"]:
                 s["alerted"] = True
                 actions.append(("alert", f"QOS API is not responding for {s['fails']} min — restarted it, still down. Nodes keep running on their own."))
+        elif name == "gateway" and restart_gateway:
+            if s["fails"] == THRESHOLDS["gateway"]:
+                s["alerted"] = True
+                actions += [("restart_gateway", ""),
+                            ("alert", f"IB Gateway not logged in for {s['fails']} min — restarting the container")]
+            elif s["fails"] == GATEWAY_RETRY_AT:
+                actions += [("restart_gateway", ""),
+                            ("alert", f"IB Gateway still not logged in after {s['fails']} min — restarted again. "
+                                      "If IBKR asks for a new login, approve it in IBKR Mobile")]
         elif s["fails"] >= THRESHOLDS.get(name, 3) and not s["alerted"]:
             s["alerted"] = True
             what = {"redis": "Redis/Valkey is down — node events and kill switch messages cannot reach the nodes",
@@ -118,7 +146,7 @@ def step(state: dict, results: dict[str, bool | None], now: float) -> list[tuple
     return actions
 
 
-def run_once(api_label: str, port: int, api_unit: str = "") -> dict:
+def run_once(api_label: str, port: int, api_unit: str = "", ibgw_dir: str = "") -> dict:
     env = read_env()
     sf = paths.data_dir() / "watchdog.json"
     try:
@@ -129,16 +157,22 @@ def run_once(api_label: str, port: int, api_unit: str = "") -> dict:
     gw = gateway_port(env)
     results = {"api": http_ok(f"http://127.0.0.1:{port}/health"),
                "redis": tcp_ok(redis.hostname or "127.0.0.1", redis.port or 6379),
-               "gateway": tcp_ok("127.0.0.1", gw) if gw else None}
+               "gateway": ib_ok("127.0.0.1", gw) if gw else None}
     now = time.time()
     done = []
-    for kind, text in step(state, results, now):
+    for kind, text in step(state, results, now, restart_gateway=bool(ibgw_dir)):
         if kind == "kickstart" and api_unit:                    # Linux server: systemd user unit (deploy/systemd)
             r = subprocess.run(["systemctl", "--user", "restart", api_unit], capture_output=True, text=True)
             done.append(f"restart {api_unit}: {'ok' if r.returncode == 0 else r.stderr.strip()[:120]}")
         elif kind == "kickstart" and api_label:
             r = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{api_label}"], capture_output=True, text=True)
             done.append(f"kickstart {api_label}: {'ok' if r.returncode == 0 else r.stderr.strip()[:120]}")
+        elif kind == "restart_gateway":
+            try:
+                r = subprocess.run(["docker", "compose", "restart"], cwd=ibgw_dir, capture_output=True, text=True, timeout=60)
+                done.append(f"docker compose restart ({ibgw_dir}): {'ok' if r.returncode == 0 else r.stderr.strip()[:120]}")
+            except Exception as e:
+                done.append(f"docker compose restart ({ibgw_dir}) failed: {e}")
         elif kind == "alert":
             done.append(("sent: " if telegram(env, text) else "not sent (no Telegram in .env): ") + text)
     doc = {"ts": now, "checks": results, "gateway_port": gw, "state": state, "actions": done}
@@ -157,9 +191,11 @@ def main() -> None:
     ap.add_argument("--api-label", default=os.getenv("QOS_API_LABEL", ""))
     ap.add_argument("--api-unit", default=os.getenv("QOS_API_UNIT", ""), help="systemd user unit to restart instead of launchctl (Linux)")
     ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--ibgw-dir", default=os.getenv("QOS_IBGW_DIR", ""),
+                    help="folder with the IB Gateway docker-compose.yml: restart it when the gateway stays logged out")
     ap.add_argument("--once", action="store_true", help="(default under launchd) check once and exit")
     a = ap.parse_args()
-    run_once(a.api_label, a.port, a.api_unit)
+    run_once(a.api_label, a.port, a.api_unit, a.ibgw_dir)
 
 
 if __name__ == "__main__":

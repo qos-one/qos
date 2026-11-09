@@ -34,6 +34,7 @@ from . import alerts as alerts_mod
 from . import gateways as gw
 from . import operators as ops
 from . import news as news_mod
+from . import ib_guard
 
 IB_HOST = os.getenv("IB_HOST", "127.0.0.1")
 IB_PORT = int(os.getenv("IB_PORT", "4004"))
@@ -383,6 +384,8 @@ def _node_event(event: str, notify_user: bool = False, **fields) -> None:
         _note_soak_ref(fields.get("node", ""))
     if event == "node_restarted":
         _hold_restarted_node(fields.get("node", ""))
+    if event == "node_stopped" and fields.get("node") and fields.get("reason") != "kill switch":
+        _on_loop(_after_node_stop_safe(fields["node"]))       # kill switch: its global cancel covers every order
     if event in ("node_exited", "node_crashed"):
         try:
             soak.incident(fields.get("node", ""), "crash", f"{event.replace('node_', '')} · exit {fields.get('exit_code')}")
@@ -1447,6 +1450,30 @@ async def reconcile() -> dict:
     return info
 
 
+GATEWAY_DOWN_ALERT_SEC = int(os.getenv("QOS_GATEWAY_DOWN_ALERT_SEC", "900"))
+_gw_down = {"since": None, "alerted": False}
+
+
+async def _gateway_down_check() -> None:
+    """IB Gateway unreachable for 15+ min (stuck at a dialog after its nightly restart, logged out, container down) → one alert"""
+    now = time.time()
+    if _gw_down["since"] is None:
+        _gw_down["since"] = now
+    if ib_guard.down_alert_due(_gw_down["since"], now, _gw_down["alerted"], GATEWAY_DOWN_ALERT_SEC):
+        _gw_down["alerted"] = True
+        mins = int((now - _gw_down["since"]) // 60)
+        await warn(f"IB Gateway unreachable for {mins} min — nodes cannot trade or cancel. Check the gateway "
+                   f"(docker compose restart in the ibgw folder clears a stuck login dialog)", down_min=mins,
+                   last_error=_conn.get("last_error", ""))
+
+
+async def _gateway_back() -> None:
+    if _gw_down["alerted"]:
+        mins = int((time.time() - (_gw_down["since"] or time.time())) // 60)
+        await warn(f"IB Gateway reachable again after {mins} min", "info", down_min=mins)
+    _gw_down["since"], _gw_down["alerted"] = None, False
+
+
 async def connection_watcher():
     """Check every 5 seconds: reconnect if dropped + reconcile; agents pause while disconnected"""
     was_connected = ib.isConnected()
@@ -1457,6 +1484,7 @@ async def connection_watcher():
                 await asyncio.sleep(5)
                 continue
             if ib.isConnected():
+                await _gateway_back()
                 if _conn["state"] != "connected":
                     _conn["state"] = "connected"
                     await ws_broadcast({"type": "conn", **_conn, "ib_connected": True})
@@ -1477,8 +1505,10 @@ async def connection_watcher():
                     notify.fire("IB Gateway connection lost — reconnecting", "error")
                     await ws_broadcast({"type": "conn", **_conn, "ib_connected": False})
                 was_connected = False
+                await _gateway_down_check()
                 try:
                     await ensure_connected()
+                    await _gateway_back()
                     _conn["reconnects"] += 1
                     info = await reconcile()
                     _conn["state"] = "connected"
@@ -2314,6 +2344,52 @@ async def nodes_delete(nid: str):
 @app.post("/nodes/{nid}/start")
 async def nodes_start(nid: str):
     return await asyncio.to_thread(_node_call, nm.start, nid)
+
+
+async def _node_orders(nid: str) -> list:
+    if not ib.isConnected():
+        return []
+    return [tr for tr in await _open_trades_fresh() if _live(tr) and _node_of_trade(tr) == nid]
+
+
+def _on_loop(coro) -> None:
+    """Run a coroutine on the API loop from sync code (event loop or worker thread)"""
+    try:
+        asyncio.get_running_loop().create_task(coro)
+        return
+    except RuntimeError:
+        pass
+    loop = _main_loop
+    if loop is not None and loop.is_running():
+        asyncio.run_coroutine_threadsafe(coro, loop)
+    else:
+        coro.close()
+
+
+async def _after_node_stop_safe(nid: str) -> None:
+    try:
+        await _after_node_stop(nid)
+    except Exception as e:
+        print(f"after node stop {nid}:", e)
+
+
+async def _after_node_stop(nid: str) -> list[dict]:
+    """A stopping node cancels its own orders. When that fails (seen: 10147 "order not found" for an order placed before a
+    restart) they stay working at IBKR and fill later with no node managing them. Cancel the leftovers as the node's
+    clientId (free now) and alert if any are still working"""
+    await asyncio.sleep(2.0)
+    trades = await _node_orders(nid)
+    if not trades:
+        return []
+    items = await _cancel_trades(trades, f"node {nid} stopped with working orders")
+    left = await _verify_cancelled(items, 2.5)
+    if left:
+        await warn(f"Node {nid} stopped but {len(left)} order(s) are still working at IBKR: "
+                   + ", ".join(f"#{o['order_id']} {o['key']} ({o['status']})" for o in left[:5])
+                   + ". Cancel them in Orders or use the Kill switch", node=nid, orders=left)
+    else:
+        await warn(f"Node {nid} left {len(items)} order(s) working when it stopped — cancelled by the API", "info", node=nid)
+    return left
 
 
 @app.post("/nodes/{nid}/stop")
@@ -4017,16 +4093,100 @@ async def modify_order(order_id: int, req: ModifyRequest):
     raise HTTPException(404, f"No open order {order_id}")
 
 
+def _node_of_trade(tr) -> str:
+    """Node that placed an order: from its Nautilus orderRef, else from the node's clientId (exec = base + 1)"""
+    coid = attr.client_order_id(getattr(tr.order, "orderRef", "") or "")
+    if coid:
+        try:
+            nd = history.node_for(coid)
+            if nd and nd[0]:
+                return nd[0]
+        except Exception:
+            pass
+    cid = int(getattr(tr.order, "clientId", 0) or 0)
+    for nid, base in nb._load_clients().items():
+        if cid in (base, base + 1):
+            return nid
+    return ""
+
+
+def _live(tr) -> bool:
+    done = getattr(tr, "isDone", None)
+    return not (done() if callable(done) else False)
+
+
+async def _open_trades_fresh() -> list:
+    """Every open order at IBKR right now, all clients. ib.openTrades() keeps other clients' orders that were already
+    cancelled elsewhere (not kept in sync), so checks after a cancel use this"""
+    try:
+        return list(await asyncio.wait_for(ib.reqAllOpenOrdersAsync(), 10))
+    except Exception as e:
+        print("reqAllOpenOrders:", e)
+        return [t for t in ib.openTrades()]
+
+
+async def _cancel_trades(trades: list, reason: str) -> list[dict]:
+    """Cancel each order through its owner (see api/ib_guard.py): own orders here, a running node's orders by the node,
+    the rest by connecting briefly with the owner's clientId"""
+    items = ib_guard.plan(trades, IB_CLIENT_ID, _node_of_trade, nm._running, attr.client_order_id)
+    by_id = {tr.order.orderId: tr for tr in trades}
+    for it in items:
+        if it["method"] == "api":
+            ib.cancelOrder(by_id[it["order_id"]].order)
+        elif it["method"] == "node":
+            n = await send_control("cancel_order", node=it["node"], client_order_id=it["client_order_id"], reason=reason)
+            if not n:
+                it["method"] = "client"                         # nobody listening on Redis → try as the owner client
+    for cid, oids in ib_guard.by_client(items).items():
+        res = await ib_guard.cancel_as_client(IB_HOST, IB_PORT, cid, oids)
+        for it in items:
+            if it["method"] == "client" and it["client_id"] == cid and not res["ok"]:
+                it["error"] = res["error"]
+    audit("cancel_routed", reason=reason, orders=[{k: it[k] for k in ("order_id", "client_id", "node", "method")} for it in items])
+    return items
+
+
+async def _verify_cancelled(items: list[dict], wait: float = 2.0) -> list[dict]:
+    """Orders from items still working at IBKR after the cancel"""
+    if not items:
+        return []
+    await asyncio.sleep(wait)
+    ids = {it["order_id"] for it in items}
+    left = []
+    for tr in await _open_trades_fresh():
+        if tr.order.orderId in ids and tr.orderStatus.status not in ("Cancelled", "ApiCancelled", "Filled", "Inactive"):
+            left.append({"order_id": tr.order.orderId, "client_id": tr.order.clientId, "key": key_of_contract(tr.contract),
+                         "status": tr.orderStatus.status})
+    return left
+
+
+async def warn(text: str, event: str = "error", **fields) -> None:
+    """Problem the operator must see: Terminal (notification + toast), Telegram/LINE when configured, audit"""
+    audit("warning", text=text, **fields)
+    notify.fire(text, event)
+    await ws_broadcast({"type": "warning", "text": text, "event": event, **fields})
+
+
 @app.post("/order/{order_id}/cancel")
 async def cancel_order(order_id: int):
     await ensure_connected()
-    for tr in ib.openTrades():
-        if tr.order.orderId == order_id and _mine(getattr(tr.order, "account", "") or ""):   # selected account only
-            ib.cancelOrder(tr.order)
-            audit("cancel", order_id=order_id, key=key_of_contract(tr.contract))
-            await asyncio.sleep(0.5)
-            return {"order_id": order_id, "status": tr.orderStatus.status}
-    raise HTTPException(404, f"No open order {order_id}")
+
+    def find(trades):
+        return next((tr for tr in trades if tr.order.orderId == order_id and _live(tr)
+                     and _mine(getattr(tr.order, "account", "") or "")), None)       # selected account only
+    tr = find(ib.openTrades()) or find(await _open_trades_fresh())
+    if tr is None:
+        raise HTTPException(404, f"No open order {order_id}")
+    items = await _cancel_trades([tr], "manual cancel")
+    it = items[0]
+    audit("cancel", order_id=order_id, key=key_of_contract(tr.contract), method=it["method"], node=it["node"])
+    left = await _verify_cancelled(items, 1.0 if it["method"] == "api" else 2.5)
+    if left:
+        why = it.get("error") or (f"node {it['node']} did not cancel it" if it["method"] == "node" else "IBKR has not confirmed")
+        await warn(f"Order {order_id} is still working at IBKR ({left[0]['status']}): {why}. Retry, or use the Kill switch "
+                   f"to cancel every order", order_id=order_id)
+        return {"order_id": order_id, "status": left[0]["status"], "method": it["method"], "still_working": True, "error": why}
+    return {"order_id": order_id, "status": "Cancelled", "method": it["method"], "still_working": False}
 
 
 def _close_order(k: str, qty: float, ref: str) -> MarketOrder:
@@ -4234,9 +4394,9 @@ async def close_all_positions():
 
 async def _close_all_impl() -> dict:
     audit("close_all", account=active_account())
-    for tr in ib.openTrades():
-        if _mine(getattr(tr.order, "account", "") or ""):          # multi-account login: the selected account only
-            ib.cancelOrder(tr.order)
+    open_now = [tr for tr in await _open_trades_fresh() if _live(tr)
+                and _mine(getattr(tr.order, "account", "") or "")]   # multi-account login: the selected account only
+    await _cancel_trades(open_now, "close all")
     await asyncio.sleep(0.5)
     results = []
     for p in (await positions())["positions"]:              # includes FX from cash balances (when reqPositions does not report them)
@@ -4415,13 +4575,31 @@ async def kill_switch(all_accounts: bool = True):
     # 2) stop node processes (nodes also close their own positions when stopping)
     await asyncio.to_thread(nm.stop_all, "kill switch")
     save_mode("manual")
+    # 2b) cancel every order at IBKR whoever placed it — the API alone cannot cancel a node's orders (IBKR ties orders
+    # to the sending clientId). Global cancel covers every account on this login, so only for a kill on all accounts
+    if ib.isConnected():
+        if all_accounts:
+            ib.reqGlobalCancel()
+            audit("global_cancel", reason="kill switch")
+        else:
+            await _cancel_trades([tr for tr in await _open_trades_fresh() if _live(tr)
+                                  and _mine(getattr(tr.order, "account", "") or "")], "kill switch")
+        await asyncio.sleep(1.0)
     # 3) close remaining positions across the account (close_all_positions bypasses risk_gate)
     closed = []
     if ib.isConnected():
         res = await close_all_positions()
         closed = res.get("closed", [])
-    audit("kill_switch_done", nodes_notified=nodes_notified, closed=len(closed))
-    return {"halted": True, "closed": closed, "nodes_notified": nodes_notified}
+    left = []
+    if ib.isConnected():
+        left = [{"order_id": tr.order.orderId, "key": key_of_contract(tr.contract), "status": tr.orderStatus.status}
+                for tr in await _open_trades_fresh() if _live(tr)
+                and not (getattr(tr.order, "orderRef", "") or "").startswith("manual:close")]
+        if left:
+            await warn(f"Kill switch: {len(left)} order(s) still working at IBKR after the cancel: "
+                       + ", ".join(f"#{o['order_id']} {o['key']}" for o in left[:5]), "kill", orders=left)
+    audit("kill_switch_done", nodes_notified=nodes_notified, closed=len(closed), orders_left=len(left))
+    return {"halted": True, "closed": closed, "nodes_notified": nodes_notified, "orders_left": left}
 
 
 @app.post("/risk/resume")

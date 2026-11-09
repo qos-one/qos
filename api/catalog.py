@@ -117,6 +117,27 @@ def write_bars(catalog, symbol: str, tf: str, df: pd.DataFrame) -> int:
     return len(bars)
 
 
+# ---------- market hours ----------
+def fx_last_close(now: pd.Timestamp) -> pd.Timestamp | None:
+    """IDEALPRO FX trades Sunday 17:00 → Friday 17:00 New York. While closed: the Friday close (UTC); while open: None"""
+    t = now.tz_convert("America/New_York")
+    wd = t.weekday()                                       # Monday = 0 … Sunday = 6
+    closed = wd == 5 or (wd == 4 and t.hour >= 17) or (wd == 6 and t.hour < 17)
+    if not closed:
+        return None
+    fri = (t - pd.Timedelta(days=(wd - 4) % 7)).normalize() + pd.Timedelta(hours=17)
+    return fri.tz_convert("UTC")
+
+
+def up_to_close(last: pd.Timestamp | None, now: pd.Timestamp, slack_min: int = 30) -> bool:
+    """Market closed and the catalog already holds bars up to the close → an update has nothing to fetch"""
+    close = fx_last_close(now)
+    return close is not None and last is not None and last >= close - pd.Timedelta(minutes=slack_min)
+
+
+QUALIFY_TIMEOUT = 60
+
+
 # ---------- IBKR fetch ----------
 async def fetch_1m(ib, symbol: str, start: datetime, end: datetime, log=print) -> list[dict]:
     """Fetch 1-minute bars backwards from end to start in chunks
@@ -126,7 +147,10 @@ async def fetch_1m(ib, symbol: str, start: datetime, end: datetime, log=print) -
     """
     from ib_async import Forex
     c = Forex(symbol)
-    await ib.qualifyContractsAsync(c)
+    try:                                                    # no timeout of its own: hung for hours when the gateway was stuck
+        await asyncio.wait_for(ib.qualifyContractsAsync(c), QUALIFY_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise RuntimeError(f"{symbol}: IBKR did not answer the contract lookup within {QUALIFY_TIMEOUT}s (gateway stuck?)")
     out: dict[str, dict] = {}
     cur_end = end
     durations = [("1 W", 7), ("2 D", 2), ("1 D", 1)]
@@ -190,11 +214,25 @@ async def build(symbols=DEFAULT_SYMBOLS, days: int = 365, update: bool = False, 
                 port: int = 4004, client_id: int = CATALOG_CLIENT_ID, catalog_dir: Path = CATALOG_DIR, log=print) -> dict:
     from ib_async import IB
     catalog = open_catalog(catalog_dir)
-    ib = IB()
-    await ib.connectAsync(host, port, clientId=client_id, timeout=30)
-    ib.reqMarketDataType(3)
     now = pd.Timestamp.now(tz="UTC").floor("min")
     summary = {"ts": now.isoformat(), "mode": "repair" if repair else "update" if update else "backfill", "port": port, "symbols": {}}
+    if update and not repair:                               # weekend: nothing new — skip without touching IBKR
+        todo = []
+        for sym in symbols:
+            last = last_timestamp(catalog, bar_type_str(sym, "1m"))
+            if up_to_close(last, now):
+                log(f"{sym}: market closed, catalog complete up to {last:%Y-%m-%d %H:%M} UTC — skipped")
+                summary["symbols"][sym] = {"bars_1m_written": 0, "bars_5m_written": 0, "first": None,
+                                           "last": last.isoformat(), "gaps_over_15m": 0, "largest_gaps": [], "skipped": "market closed"}
+            else:
+                todo.append(sym)
+        symbols = todo
+        if not symbols:
+            write_manifest(summary, catalog_dir)
+            return summary
+    ib = IB()
+    await asyncio.wait_for(ib.connectAsync(host, port, clientId=client_id, timeout=30), 45)
+    ib.reqMarketDataType(3)
     try:
         for sym in symbols:
             if repair:
