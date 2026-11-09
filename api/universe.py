@@ -51,7 +51,7 @@ STK = [
 
 CRYPTO = [
     ("BTC", "Bitcoin"), ("ETH", "Ethereum"), ("LTC", "Litecoin"), ("BCH", "Bitcoin Cash"),
-    ("SOL", "Solana"), ("AVAX", "Avalanche"), ("LINK", "Chainlink"), ("UNI", "Uniswap"), ("DOGE", "Dogecoin"),
+    ("SOL", "Solana"), ("LINK", "Chainlink"), ("UNI", "Uniswap"),          # AVAX, DOGE: not on IBKR PAXOS
 ]
 
 IDX = [

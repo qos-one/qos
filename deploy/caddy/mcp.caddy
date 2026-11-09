@@ -1,0 +1,28 @@
+# Remote AI access to the QOS MCP server (written to /etc/caddy/sites/mcp.caddy by deploy/mcp-setup.sh).
+# No IP allowlist here: AI providers call from their own servers. Every request needs the bearer token, which the MCP
+# server checks; the AI then acts as an operator with role "assistant" (paper only unless an admin enables live).
+__DOMAIN__ {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	# the MCP server only accepts its own Host (DNS-rebinding guard) → rewrite it; stream responses without buffering
+	handle /mcp* {
+		reverse_proxy 127.0.0.1:8765 {
+			header_up Host 127.0.0.1:8765
+			flush_interval -1
+		}
+	}
+	handle {
+		respond 404
+	}
+	log {
+		output file /var/log/caddy/mcp.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

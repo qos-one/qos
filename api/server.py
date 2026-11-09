@@ -22,7 +22,7 @@ from ib_async import IB, Contract, Crypto, ExecutionFilter, Forex, Index, LimitO
 from pydantic import BaseModel, ConfigDict, Field
 
 from .universe import MARKETS, UNIVERSE, default_watchlist
-from .groups import GROUPS, GROUP_BY_ID
+from .groups import GROUPS, GROUP_BY_ID, SCANNERS, SCANNER_BY_ID, SCAN_ROWS, SCAN_MIN_PRICE, SCAN_MIN_VOLUME, scan_weight, scan_leader
 from . import history
 from . import attribution as attr
 from . import soak
@@ -1662,6 +1662,7 @@ async def lifespan(_: FastAPI):
     rec_task = asyncio.create_task(recorder_loop())
     watch_task = asyncio.create_task(connection_watcher())
     push_task = asyncio.create_task(ws_pusher())
+    heat_task = asyncio.create_task(heat_prefetch_loop())
     ib.execDetailsEvent += _on_exec
     ib.orderStatusEvent += _on_order_status
     ib.errorEvent += _on_ib_error
@@ -1673,7 +1674,7 @@ async def lifespan(_: FastAPI):
         print("legacy agents not migrated yet:", _legacy, "— POST /agents/migrate")
     print("mode:", load_mode(), "| nodes:", nm.brief())
     yield
-    rec_task.cancel(); watch_task.cancel(); push_task.cancel(); bus.stop(); risk_task.cancel(); soak_task.cancel(); ramp_task.cancel()
+    rec_task.cancel(); watch_task.cancel(); push_task.cancel(); heat_task.cancel(); bus.stop(); risk_task.cancel(); soak_task.cancel(); ramp_task.cancel()
     wake_task.cancel(); backup_task.cancel(); cloud_task.cancel(); feed_task.cancel(); power.update(False)
     if ib.isConnected():
         ib.disconnect()
@@ -1994,7 +1995,10 @@ async def bars(key: str = "FX:EURUSD", bar_size: str = "1 min", duration: str = 
 
 # ---------- market overview (market groups) and heatmap ----------
 _heat_cache: dict[str, tuple[float, list[dict]]] = {}
-HEAT_TTL = 60.0
+_heat_missing: dict[str, list[str]] = {}
+HEAT_TTL = 150.0                 # a snapshot this fresh is served as is
+HEAT_PREFETCH_EVERY = 120.0      # while a Terminal is open, every heatmap is rebuilt in the background this often
+HEAT_PREFETCH_GAP = 1.0          # pause between groups (market data lines and IBKR pacing)
 
 
 def _ticker_row(key: str, t) -> dict:
@@ -2027,32 +2031,159 @@ async def market():
             q = await _proxy_quote(g["alt_proxy"]) or q
         q = q or {"key": g["proxy"], "symbol": g["proxy"].split(":")[1], "last": 0.0, "prev_close": 0.0, "change_pct": 0.0, "decimals": 2}
         rows.append({"id": g["id"], "name": g["name"], "subtitle": g["subtitle"], "members": len(g["members"]), **q})
+    for s in SCANNERS:                      # scanner cards show the leader from the last scan; scanning happens in /heatmap only
+        _, cached = _heat_cache.get(s["id"], (0.0, []))
+        lead = scan_leader(cached, s["scan_code"])
+        q = ({k: lead[k] for k in ("key", "symbol", "last", "prev_close", "change_pct", "decimals")} if lead else
+             {"key": "", "symbol": "", "last": 0.0, "prev_close": 0.0, "change_pct": 0.0, "decimals": 2})
+        rows.append({"id": s["id"], "name": s["name"], "subtitle": s["subtitle"], "members": len(cached) or SCAN_ROWS, **q})
     return {"as_of": datetime.now(timezone.utc).isoformat(), "items": rows}
 
 
 @app.get("/heatmap")
 async def heatmap(group: str):
-    """Price snapshot of all group members (cached 60 seconds) for the heatmap"""
+    """Price snapshot of all group members for the heatmap. Fresh for 150 s (kept fresh by heat_prefetch_loop while a Terminal is open); up to 15 min old it is returned at once and
+    refreshed in the background, so opening a heatmap a second time does not wait for IBKR"""
     await ensure_connected()
-    g = GROUP_BY_ID.get(group.upper())
+    gid = group.upper()
+    g = GROUP_BY_ID.get(gid) or SCANNER_BY_ID.get(gid)
     if not g:
         raise HTTPException(404, f"Unknown group {group}")
-    import time as _t
     ts, cached = _heat_cache.get(g["id"], (0.0, []))
-    if _t.time() - ts < HEAT_TTL and cached:
-        return {"group": g["id"], "name": g["name"], "cached": True, "items": cached, "breadth": _breadth(cached)}
+    age = time.time() - ts
+    if cached and age < HEAT_TTL:
+        return _heat_reply(g, cached, age, cached=True)
+    if cached and age < HEAT_STALE_MAX:
+        _heat_task(g)
+        return _heat_reply(g, cached, age, cached=True, refreshing=True)
+    items = await asyncio.shield(_heat_task(g))
+    return _heat_reply(g, items, 0.0, cached=False)
 
-    mkt = g["market"]
-    contracts, meta = [], []
-    for sym, name, w in g["members"]:
-        key = f"{mkt}:{sym}"
+
+HEAT_STALE_MAX = 900.0
+_heat_tasks: dict[str, asyncio.Future] = {}
+
+
+_heat_failed: dict[str, float] = {}              # last failed prefetch per group: retried after HEAT_PREFETCH_EVERY, not every loop
+
+
+def heat_due(now: float, cache: dict, ids: list[str], every: float = HEAT_PREFETCH_EVERY, failed: dict | None = None) -> list[str]:
+    """Groups whose snapshot is missing or older than `every` (and did not just fail), oldest first"""
+    failed = failed or {}
+    ages = [(now - max(cache.get(i, (0.0, []))[0], failed.get(i, 0.0)), i) for i in ids]
+    return [i for age, i in sorted(ages, reverse=True) if age >= every]
+
+
+async def heat_prefetch_loop() -> None:
+    """Keep every heatmap ready while a Terminal is connected (live stream open): groups are rebuilt one at a time in
+    the background, so opening a heatmap shows a snapshot at once. Nothing runs while no Terminal is open"""
+    await asyncio.sleep(20)                                   # let the API connect and reconcile first
+    while True:
         try:
-            c = await contract_for(key)
-        except Exception:
+            if _ws_clients and ib.isConnected():
+                groups = {g["id"]: g for g in [*GROUPS, *SCANNERS]}
+                for gid in heat_due(time.time(), _heat_cache, list(groups), failed=_heat_failed):
+                    if not _ws_clients or not ib.isConnected():
+                        break
+                    try:
+                        await asyncio.shield(_heat_task(groups[gid]))
+                    except Exception as e:
+                        _heat_failed[gid] = time.time()
+                        print(f"heatmap prefetch {gid}: {getattr(e, 'detail', e)}")
+                    await asyncio.sleep(HEAT_PREFETCH_GAP)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print("heatmap prefetch:", e)
+        await asyncio.sleep(10)
+
+
+def _heat_reply(g: dict, items: list[dict], age: float, cached: bool, refreshing: bool = False) -> dict:
+    return {"group": g["id"], "name": g["name"], "cached": cached, "items": items, "breadth": _breadth(items),
+            "missing": _heat_missing.get(g["id"], []), "age_s": round(age, 1), "refreshing": refreshing}
+
+
+def _heat_task(g: dict) -> asyncio.Future:
+    """One snapshot build per group at a time: a second request (or a background refresh) joins the one in flight"""
+    t = _heat_tasks.get(g["id"])
+    if t is None or t.done():
+        t = asyncio.ensure_future(_heat_build(g))
+        t.add_done_callback(lambda f: f.cancelled() or f.exception())       # a failed background refresh is not "never retrieved"
+        _heat_tasks[g["id"]] = t
+    return t
+
+
+async def _heat_build(g: dict) -> list[dict]:
+    if "scan_code" in g:
+        contracts, meta = await _scan(g["scan_code"])
+        missing: list[str] = []
+    else:
+        contracts, meta, missing = await _group_contracts(g)
+    items = await _snapshot(contracts, meta)
+    if "scan_code" in g:
+        for r in items:
+            r["weight"] = scan_weight(g["scan_code"], int(r["weight"]), r["change_pct"])
+    items.sort(key=lambda r: -r["weight"])
+    _heat_cache[g["id"]] = (time.time(), items)
+    _heat_missing[g["id"]] = missing                # members IBKR does not recognise (renamed / delisted) — shown, not hidden
+    return items
+
+
+async def _group_contracts(g: dict) -> tuple[list, list, list[str]]:
+    """Contracts of a fixed group: members not yet known are qualified in one batch (in parallel), not one by one"""
+    def key_of(sym: str) -> str:                 # a member may name its own market, e.g. "IDX:VIX" in a group of stocks
+        return sym if ":" in sym else f"{g['market']}:{sym}"
+    todo = [(key_of(sym), build_contract(*parse_key(key_of(sym)))) for sym, _, _ in g["members"] if key_of(sym) not in _contracts]
+    if todo:
+        try:
+            await asyncio.wait_for(ib.qualifyContractsAsync(*[c for _, c in todo]), 20)
+        except Exception as e:
+            print(f"heatmap {g['id']}: qualify: {e or type(e).__name__}")
+        for key, c in todo:
+            if c.conId:
+                _contracts[key] = c
+    contracts, meta, missing = [], [], []
+    for sym, name, w in g["members"]:
+        key = key_of(sym)
+        sym = parse_key(key)[1]
+        c = _contracts.get(key)
+        if c is None:
+            missing.append(sym)
             continue
         contracts.append(c)
         meta.append((key, sym, name, w))
+    if missing:
+        print(f"heatmap {g['id']}: not recognised by IBKR: {', '.join(missing)}")
+    return contracts, meta, missing
 
+
+async def _scan(scan_code: str) -> tuple[list, list]:
+    """Whole-market US stock scan by IBKR (top % gainers / losers / most active), price and volume filtered.
+    Returns contracts + (key, symbol, name, rank) like a fixed group's members"""
+    from ib_async import ScannerSubscription
+    sub = ScannerSubscription(instrument="STK", locationCode="STK.US.MAJOR", scanCode=scan_code, numberOfRows=SCAN_ROWS,
+                              abovePrice=SCAN_MIN_PRICE, aboveVolume=SCAN_MIN_VOLUME)
+    try:
+        rows = await asyncio.wait_for(ib.reqScannerDataAsync(sub), 20)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "IBKR market scanner did not answer within 20 s")
+    if not rows:
+        raise HTTPException(502, "IBKR market scanner returned no stocks (market data permissions, or try again in a minute)")
+    contracts, meta = [], []
+    for r in rows:
+        c = getattr(r.contractDetails, "contract", None)
+        if c is None or c.secType != "STK" or not c.conId:
+            continue
+        c.exchange = "SMART"                     # scanner contracts carry the listing exchange; quotes come from SMART
+        key = f"STK:{c.symbol}"
+        name = NAME_BY_KEY.get(key) or getattr(r.contractDetails, "longName", "") or c.symbol
+        contracts.append(c)
+        meta.append((key, c.symbol, name, int(r.rank)))
+    return contracts, meta
+
+
+async def _snapshot(contracts: list, meta: list) -> list[dict]:
+    """One price snapshot per contract: temporary market data subscriptions in batches (stay within the quota)"""
     items = []
     for i in range(0, len(contracts), 45):          # temporary subscriptions in batches (stay within market data quota)
         chunk = contracts[i:i + 45]
@@ -2064,7 +2195,7 @@ async def heatmap(group: str):
                 tickers.append((_tickers[k], False))
             else:
                 tickers.append((ib.reqMktData(c, "", False, False), True))
-        await asyncio.sleep(2.5)                     # wait for prices
+        await _wait_prices([t for t, _ in tickers])
         for (key, sym, name, w), (t, temp) in zip(chunk_meta, tickers):
             row = _ticker_row(key, t)
             row.update({"name": name, "weight": w})
@@ -2074,9 +2205,19 @@ async def heatmap(group: str):
                     ib.cancelMktData(t.contract)
                 except Exception:
                     pass
-    items.sort(key=lambda r: -r["weight"])
-    _heat_cache[g["id"]] = (_t.time(), items)
-    return {"group": g["id"], "name": g["name"], "cached": False, "items": items, "breadth": _breadth(items)}
+    return items
+
+
+def _has_price(t) -> bool:
+    return bool((_px(t.last) or (_px(t.bid) and _px(t.ask))) and _px(t.close))
+
+
+async def _wait_prices(tickers: list, max_wait: float = 2.5) -> None:
+    """Wait until every ticker has a price and a previous close, at most max_wait seconds (was a fixed 2.5 s)"""
+    deadline = time.monotonic() + max_wait
+    await asyncio.sleep(0.2)
+    while time.monotonic() < deadline and not all(_has_price(t) for t in tickers):
+        await asyncio.sleep(0.1)
 
 
 def _breadth(items: list[dict]) -> dict:

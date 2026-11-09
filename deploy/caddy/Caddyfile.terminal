@@ -34,3 +34,6 @@
 		}
 	}
 }
+
+# extra sites, e.g. remote AI access written by deploy/mcp-setup.sh
+import /etc/caddy/sites/*.caddy

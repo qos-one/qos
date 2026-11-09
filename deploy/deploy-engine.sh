@@ -33,6 +33,7 @@ if [ "$TESTS" = 1 ]; then
 fi
 if systemctl --user is-active -q qos-api.service; then
   if [ "$RESTART" = 1 ]; then systemctl --user restart qos-api.service && echo "api restarted"; else echo "api running (not restarted; RESTART=1 to restart)"; fi
+  if systemctl --user is-active -q qos-mcp.service && [ "$RESTART" = 1 ]; then systemctl --user restart qos-mcp.service && echo "mcp restarted"; fi
 else
   echo "api not started yet (start it at cut-over: systemctl --user start qos-api.service)"
 fi

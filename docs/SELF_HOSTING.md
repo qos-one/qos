@@ -86,6 +86,14 @@ viewer to `localhost:5901`.
   [deploy/README.md](../deploy/README.md) shows how to line up the books.
 - Never run the test suite on the server while nodes trade.
 
+## Remote AI (optional)
+
+To let an AI client such as Grok (xAI API) or ChatGPT read the account and trade on paper, open the MCP server on its
+own domain: `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an operator with role
+`assistant`: paper accounts only unless you turn on live, the assistant limits and the risk gate always apply. See the
+"Remote AI (MCP)" section of [deploy/README.md](../deploy/README.md). Anything the AI reads (positions, P&L, account
+numbers) goes to the AI provider.
+
 ## Security notes
 
 - Only SSH (and 80/443 for option B) are open. The API, Redis, IB Gateway and VNC listen on 127.0.0.1.

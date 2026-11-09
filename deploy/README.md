@@ -157,6 +157,36 @@ Updates: run the workflow again and repeat step 5 (the last three builds are kep
 Logs: `ssh ENGINE 'journalctl --user -u qos-terminal -n 50 --no-pager'` · `/var/log/caddy/terminal.log`.
 Switch it off: `ssh ENGINE 'systemctl --user disable --now qos-terminal.service'` and `systemctl disable --now caddy` (root).
 
+## Remote AI (MCP): Grok, ChatGPT and other AI clients
+
+Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsewhere can read the account and trade.
+The AI signs in as operator `remote_ai` (role `assistant`). The API enforces the limits whatever the AI is told:
+paper accounts only (unless an admin turns on live), the assistant limits in the Terminal (order size, orders per hour,
+no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in the Terminal.
+
+1. DNS: an A record such as `mcp.example.com` → the engine server.
+2. On the server, once (root):
+   ```
+   ssh ENGINE
+   sudo QOS_MCP_DOMAIN=mcp.example.com bash /srv/qos/engine/bot/deploy/mcp-setup.sh
+   ```
+   It generates the bearer token and the operator PIN into `/srv/qos/home/.env` (nothing printed), starts `qos-mcp`
+   (127.0.0.1:8765) and adds the Caddy site. `MCP_AUTONOMOUS=1` (default) lets the AI confirm its own orders;
+   `MCP_AUTONOMOUS=0 ... mcp-setup.sh` makes it ask the user first.
+3. Check from the Mac (no order is sent):
+   ```
+   export QOS_MCP_URL=https://mcp.example.com/mcp
+   export QOS_MCP_TOKEN=$(ssh ENGINE "grep '^MCP_BEARER_TOKEN=' /srv/qos/home/.env | cut -d= -f2")
+   uv run python scripts/check_remote_mcp.py
+   ```
+4. AI client: server URL `https://mcp.example.com/mcp`, header `Authorization: Bearer <token>`. xAI API:
+   `tools=[{"type": "mcp", "server_url": "https://mcp.example.com/mcp", "server_label": "qos", "authorization": TOKEN}]`.
+   Keep the token in the client's secret settings; never paste it into a chat.
+
+Stop it: `systemctl --user disable --now qos-mcp` (as qos). New token: delete the `MCP_BEARER_TOKEN` line in
+`/srv/qos/home/.env`, run `mcp-setup.sh` again, update the AI client. Read-only for a while: turn off trading for the
+AI assistant in the Terminal. Updates: `RESTART=1 deploy/deploy-engine.sh` also restarts `qos-mcp`.
+
 ## Rollback to the Mac
 
 1. Server: stop nodes in the Terminal, then `ssh ENGINE 'systemctl --user disable --now qos-api.service qos-catalog.timer qos-watchdog.timer; cd /srv/qos/home/ibgw && docker compose down'`.

@@ -64,13 +64,13 @@ BONDS = [
 ]
 
 CRYPTO = [("BTC", "Bitcoin", 6.0), ("ETH", "Ethereum", 3.0), ("SOL", "Solana", 1.2), ("LTC", "Litecoin", 0.6), ("BCH", "Bitcoin Cash", 0.5),
-          ("AVAX", "Avalanche", 0.5), ("LINK", "Chainlink", 0.6), ("UNI", "Uniswap", 0.4), ("DOGE", "Dogecoin", 0.8)]
+          ("LINK", "Chainlink", 0.6), ("UNI", "Uniswap", 0.4)]          # AVAX, DOGE: not offered on IBKR PAXOS (checked 2026-11-09)
 
 FOREX = [("EURUSD", "EUR/USD", 3.0), ("USDJPY", "USD/JPY", 2.5), ("GBPUSD", "GBP/USD", 2.0), ("AUDUSD", "AUD/USD", 1.5), ("USDCAD", "USD/CAD", 1.5),
          ("USDCHF", "USD/CHF", 1.2), ("NZDUSD", "NZD/USD", 1.0), ("EURGBP", "EUR/GBP", 1.0), ("EURJPY", "EUR/JPY", 1.0), ("GBPJPY", "GBP/JPY", 0.8),
          ("USDCNH", "USD/CNH", 0.8), ("USDMXN", "USD/MXN", 0.6), ("USDSGD", "USD/SGD", 0.5), ("USDSEK", "USD/SEK", 0.5), ("USDNOK", "USD/NOK", 0.5)]
 
-VOL = [("VIX", "VIX Index", 2.0), ("VXX", "VIX Short-Term ETN", 1.0), ("UVXY", "Ultra VIX", 0.8), ("SVXY", "Short VIX", 0.8)]
+VOL = [("IDX:VIX", "VIX Index", 2.0), ("VXX", "VIX Short-Term ETN", 1.0), ("UVXY", "Ultra VIX", 0.8), ("SVXY", "Short VIX", 0.8)]
 
 # id, name, subtitle, proxy key, members' market, members
 GROUPS = [
@@ -86,3 +86,32 @@ GROUPS = [
     {"id": "VOL",     "name": "Volatility",     "subtitle": "VIX and volatility products",    "proxy": "IDX:VIX", "alt_proxy": None,      "market": "STK",    "members": VOL},
 ]
 GROUP_BY_ID = {g["id"]: g for g in GROUPS}
+
+# Groups filled by the IBKR market scanner (whole US market, refreshed with the heatmap cache) instead of a fixed list
+SCAN_ROWS = 50                     # IBKR returns at most 50 rows per scan
+SCAN_MIN_PRICE = 5.0               # skip penny stocks
+SCAN_MIN_VOLUME = 200_000          # skip illiquid names
+SCANNERS = [
+    {"id": "GAINERS", "name": "Top gainers", "subtitle": "US stocks · biggest % rise today · IBKR scanner", "scan_code": "TOP_PERC_GAIN"},
+    {"id": "LOSERS",  "name": "Top losers",  "subtitle": "US stocks · biggest % fall today · IBKR scanner", "scan_code": "TOP_PERC_LOSE"},
+    {"id": "ACTIVE",  "name": "Most active", "subtitle": "US stocks · highest volume today · IBKR scanner",  "scan_code": "MOST_ACTIVE"},
+]
+SCANNER_BY_ID = {s["id"]: s for s in SCANNERS}
+
+
+def scan_weight(scan_code: str, rank: int, change_pct: float) -> float:
+    """Tile size: the size of the move for gainers/losers, the scanner rank for most active (rank 0 = biggest)"""
+    if scan_code in ("TOP_PERC_GAIN", "TOP_PERC_LOSE"):
+        return round(max(abs(change_pct or 0.0), 0.1), 2)
+    return float(max(SCAN_ROWS - rank, 1))
+
+
+def scan_leader(items: list[dict], scan_code: str) -> dict | None:
+    """Row shown on the market card: the biggest gainer / loser, or the most active name"""
+    if not items:
+        return None
+    if scan_code == "TOP_PERC_GAIN":
+        return max(items, key=lambda r: r.get("change_pct") or 0.0)
+    if scan_code == "TOP_PERC_LOSE":
+        return min(items, key=lambda r: r.get("change_pct") or 0.0)
+    return max(items, key=lambda r: r.get("weight") or 0.0)

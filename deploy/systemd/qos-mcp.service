@@ -1,0 +1,17 @@
+[Unit]
+Description=QOS MCP server for remote AI clients (Grok, ChatGPT) over HTTPS — deploy/README.md "Remote AI (MCP)"
+After=network-online.target qos-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/qos/engine/bot
+EnvironmentFile=/srv/qos/deploy.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=MCP_HOST=127.0.0.1 MCP_PORT=8765 MCP_SOURCE=remote-ai
+ExecStart=%h/.local/bin/uv run --frozen python mcp_server.py --transport http
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
