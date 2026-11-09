@@ -7,7 +7,7 @@
 ## 1. The whole flow
 
 ```
-pip install qos-sdk                  ← no QOS needed
+pip install "qos-sdk @ git+https://github.com/qos-one/qos.git#subdirectory=qos_sdk"   ← no QOS needed
 qos new my_strategy                  ← or qos new --ml my_model
 cd my_strategy && pytest tests       ← synthetic bars, no data needed
 (real data) qos data export …        ← someone with QOS exports a parquet file
@@ -20,7 +20,7 @@ soak GO → Allow live                 ← Terminal › Strategies › Nodes usi
 
 | Step | Who | Where |
 |---|---|---|
-| Write + test | Developer | Own machine (`pip install qos-sdk`) |
+| Write + test | Developer | Own machine (the SDK, see Install) |
 | `qos install` | Developer or QOS operator | QOS machine (or own machine = checks only) |
 | Backtest / walk-forward | QOS, automatically | Strategy lab job |
 | Deploy paper, soak, Allow live | QOS operator | Terminal |
@@ -29,14 +29,21 @@ soak GO → Allow live                 ← Terminal › Strategies › Nodes usi
 
 ```
 python -m venv .venv && source .venv/bin/activate
-pip install qos-sdk              # ML: pip install "qos-sdk[ml]"     tests: pip install "qos-sdk[test]"
+pip install "qos-sdk @ git+https://github.com/qos-one/qos.git#subdirectory=qos_sdk"
 qos --help
+```
+
+The SDK is not on PyPI yet: install it from GitHub as above (add `[ml]` for the ML template, `[test]` for pytest:
+`"qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git#subdirectory=qos_sdk"`). Pin a release with `@v0.1.3`
+after `qos.git`.
+
+```
 ```
 
 Python ≥ 3.12. qos-sdk installs NautilusTrader 1.230 (the same version QOS uses), so a local backtest gives the same result as QOS on the same bars
 (proven by the test `test_quick_backtest_equals_qos_backtest`).
 
-On a machine that already runs QOS there is no need to pip install: use `~/trading/bot/scripts/qos` (alias `qos`).
+On a machine that already runs QOS there is no need to install it: run `uv run qos` in the QOS folder.
 
 ## 3. First strategy
 

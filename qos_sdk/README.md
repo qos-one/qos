@@ -3,7 +3,7 @@
 Write a trading strategy in one Python file, test it on your machine with the same Nautilus backtest engine QOS uses, and install it into QOS.
 
 ```
-pip install qos-sdk            # ML template: pip install "qos-sdk[ml]"
+pip install "qos-sdk @ git+https://github.com/qos-one/qos.git#subdirectory=qos_sdk"
 qos new my_strategy            # or: qos new --ml my_model
 cd my_strategy && pytest tests
 qos install .
@@ -17,7 +17,7 @@ bars = catalog.bars("EUR/USD", "5m", "2026-01-01", "2026-06-30", source="eurusd_
 print(quick_backtest(MyStrategy, {"fast": 12}, bars)["pnl_usd"])
 ```
 
-Full guide (Thai + English): `docs/DEVELOPER.md` in QOS.
+Not on PyPI yet: install from GitHub as above (`qos-sdk[ml]` adds the ML template). Full guide: `docs/DEVELOPER.md` in QOS.
 
 ## License
 
