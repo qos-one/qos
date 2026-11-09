@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Run ON YOUR MAC: copy the engine code to the VPS, install Python packages, install/refresh the systemd user services.
-# Copies code only: never .env, data/, reports/ or IB Gateway settings (that is deploy/migrate-data.sh, once, at cut-over).
+# Run ON YOUR COMPUTER: copy the engine code to the VPS, install Python packages, install/refresh the systemd user services.
+# Copies code only: never .env, data/, reports/ or IB Gateway settings (those stay on the server).
 #   QOS_ENGINE_HOST=qos@<server-ip> deploy/deploy-engine.sh            install / update, does not start or restart anything
 #   RESTART=1 QOS_ENGINE_HOST=... deploy/deploy-engine.sh              also restart the API if it is running (nodes keep running)
 #   TESTS=1 ...                                                         run the test suite on the server after installing

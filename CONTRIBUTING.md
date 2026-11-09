@@ -18,7 +18,7 @@ The Terminal itself lives in the `qos-terminal` repository.
 
 ```
 git clone <repository>
-cd bot
+cd qos
 uv sync
 uv run pytest -q
 ```

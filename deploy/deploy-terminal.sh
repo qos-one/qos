@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Run ON YOUR MAC: install a web Terminal build on the engine server and (re)start it.
+# Run ON YOUR COMPUTER: install a web Terminal build on the engine server and (re)start it.
 # The build comes from GitHub Actions (workflow "Web Terminal" in the dashboard repo), it is Linux-only:
 #   gh run download -R <owner>/<dashboard-repo> -n qos-terminal-web -D /tmp/qos-terminal-web
 #   QOS_ENGINE_HOST=qos@<server-ip> deploy/deploy-terminal.sh /tmp/qos-terminal-web/qos-terminal-web.tgz

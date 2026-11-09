@@ -225,7 +225,7 @@ Rules for marketplace agents (checked automatically):
 
 ### Buyers get a compiled build
 
-By default QOS compiles your approved agent with Cython for each buyer platform (e.g. `cp313-darwin-arm64`); buyers never receive your `.py` source. Publish with `--source` if you want to ship readable source instead.
+By default QOS compiles your approved agent with Cython for each buyer platform (e.g. `cp313-linux-x86_64`); buyers never receive your `.py` source. Publish with `--source` if you want to ship readable source instead.
 
 To keep your agent compatible with compilation:
 - load helper modules with `sibling(__file__, "features")` and models with `self.load_model(...)` (both work compiled)

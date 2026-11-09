@@ -28,7 +28,7 @@ services:
       READ_ONLY_API: "no"
       EXISTING_SESSION_DETECTED_ACTION: primary
       TWOFA_TIMEOUT_ACTION: restart
-      AUTO_RESTART_TIME: "11:55 PM"
+      AUTO_RESTART_TIME: "05:05 PM"       # 5 min after the FX day rolls over (17:00 New York), when almost nothing trades
       TIME_ZONE: America/New_York
     ports:
       - "127.0.0.1:{api_port}:{container_port}"

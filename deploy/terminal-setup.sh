@@ -30,6 +30,6 @@ if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 80/t
 echo "== folders"
 install -d -o qos -g qos /srv/qos/terminal /srv/qos/terminal/releases
 echo
-echo "Next (as qos): add the API settings to /srv/qos/deploy.env, then deploy the Terminal from your Mac:"
+echo "Next (as qos): add the API settings to /srv/qos/deploy.env, then deploy the Terminal from your computer:"
 echo "  QOS_PUBLIC_TERMINAL=1"
 echo "  QOS_TRUSTED_ORIGINS=https://$QOS_TERMINAL_DOMAIN"

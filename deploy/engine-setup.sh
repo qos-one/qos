@@ -42,4 +42,4 @@ sysctl -q -p /etc/sysctl.d/90-qos.conf
 free -h | head -3
 
 echo
-echo "Done. Next, from your Mac:  QOS_ENGINE_HOST=$U@<server-ip> deploy/deploy-engine.sh"
+echo "Done. Next, from your computer:  QOS_ENGINE_HOST=$U@<server-ip> deploy/deploy-engine.sh"
