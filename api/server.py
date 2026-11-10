@@ -5185,7 +5185,13 @@ async def operator_guard(request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "no operator configured: run `qos operator add <name> --role admin` on the server"}, status_code=503)
         if not ops.public_mode():
-            op = {"id": "local", "name": "Local user", "role": "admin"}      # no operators set yet → legacy mode (personal machine)
+            # no operators set yet → legacy mode (personal machine): the Terminal and CLI are the local admin, but an AI
+            # never is. The MCP server marks its requests, so they get the assistant role and every assistant check.
+            # A forged marker can only lower the caller's rights.
+            from_mcp = (request.headers.get("x-qos-client", "").strip().lower() == "mcp"
+                        or request.headers.get("x-source", "").strip().lower().startswith("mcp"))
+            op = ({"id": "local-ai", "name": "Local AI assistant", "role": "assistant"} if from_mcp
+                  else {"id": "local", "name": "Local user", "role": "admin"})
     ops.current.set(op)
     _req_meta.set({"source": request.headers.get("x-source", "terminal")[:40], "request_id": request.headers.get("x-request-id", "")[:64]})
     if path in ops.PUBLIC or path.startswith("/docs"):

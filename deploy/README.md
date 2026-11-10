@@ -122,7 +122,8 @@ Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsew
 orders (paper by default, live only if an admin turns it on). The AI signs in as operator `remote_ai` (role
 `assistant`). The API enforces the limits whatever the AI is told: the assistant limits in the Terminal (order size,
 orders per hour, no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in
-the Terminal.
+the Terminal. The AI always runs as a limited assistant, including on a personal machine with no operators
+set up.
 
 You choose what the AI may do in the Terminal, top bar → **AI**:
 

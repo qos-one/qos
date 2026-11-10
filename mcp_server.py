@@ -41,7 +41,11 @@ class Api:
     async def login(self) -> None:
         st = (await self.c.get("/operators/status")).json()
         if not st.get("configured"):
-            self.token = ""        # no operators configured → API treats us as local admin (personal machines only)
+            self.token = ""        # no operators configured → the API still treats us as a limited assistant (X-QOS-Client)
+            if not getattr(self, "_warned", False):
+                self._warned = True
+                print("No operators configured: the AI runs as a limited assistant (Read-only by default). "
+                      "Create an operator with role 'assistant' for remote use.", file=sys.stderr, flush=True)
             return
         oid, pin = os.getenv("ASSISTANT_OPERATOR_ID", "assistant"), os.getenv("ASSISTANT_PIN", "")
         r = await self.c.post("/operators/login", json={"id": oid, "pin": pin})
@@ -50,7 +54,7 @@ class Api:
         self.token = r.json()["token"]
 
     def _h(self, client_id: str = "") -> dict:
-        return {"X-Operator-Token": self.token, "X-Source": f"{SOURCE}:{client_id}" if client_id else SOURCE, "X-Request-Id": uuid.uuid4().hex[:16]}
+        return {"X-Operator-Token": self.token, "X-QOS-Client": "mcp", "X-Source": f"{SOURCE}:{client_id}" if client_id else SOURCE, "X-Request-Id": uuid.uuid4().hex[:16]}
 
     async def call(self, method: str, path: str, retry: bool = True, **kw) -> Any:
         try:

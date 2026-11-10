@@ -95,7 +95,8 @@ viewer to `localhost:5901`.
 To let an AI client such as Grok (xAI API) or ChatGPT read the account and place orders (paper by default, live only
 if an admin turns it on), open the MCP server on its own domain:
 `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an operator with role `assistant`: the
-assistant limits and the risk gate always apply.
+assistant limits and the risk gate always apply. The AI always runs as a limited assistant, including on a personal
+machine with no operators set up.
 
 By default the AI cannot place orders. In the Terminal, top bar → **AI**, choose **Ask first** to approve each of its
 orders yourself, or **Auto** to let it confirm its own orders without asking you. See the "Remote AI (MCP)" section of
