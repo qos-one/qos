@@ -8,8 +8,8 @@ Run:
 Configure in .env:
   ASSISTANT_OPERATOR_ID=assistant  ASSISTANT_PIN=xxxx   (an operator with role=assistant created by an admin in Terminal → Risk → Security)
   MCP_BEARER_TOKEN=<random>          (http only: the client must send Authorization: Bearer <token>)
-  MCP_AUTONOMOUS=1                   the AI may confirm its own orders without asking (paper by default; the API still
-                                     applies the assistant limits and the risk gate)
+Whether the AI may send an order on its own is not set here: the operator chooses it in the Terminal (top bar → AI:
+Read-only / Ask first / Auto). The default is Ask first: every order waits for the operator's approval in the Terminal.
 """
 from __future__ import annotations
 
@@ -81,24 +81,24 @@ class Api:
 
 api = Api()
 HOST, PORT = os.getenv("MCP_HOST", "127.0.0.1"), int(os.getenv("MCP_PORT", "8765"))
-AUTONOMOUS = os.getenv("MCP_AUTONOMOUS", "") == "1"
 ORDER_RULE = (
-    "You may confirm orders you prepared yourself, without asking first, when they follow the user's standing instructions; "
-    "orders go to a paper account by default, and QOS enforces the assistant limits (order size, orders per hour, no shorts) and the risk gate. "
-    "Report every order you send. " if AUTONOMOUS else
-    "show it to the user and only call confirm_order after the user explicitly approves in this conversation. ")
+    "what happens at confirm_order is the operator's choice in the QOS Terminal (the AI control in the top bar): "
+    "with 'Ask first' (the default) the order is NOT sent — it waits for the operator to approve it in the Terminal, so tell the user "
+    "and call confirm_order with the same token again to see the outcome; with 'Auto' it is sent at once. "
+    "Orders go to a paper account by default, and QOS enforces the assistant limits (order size, orders per hour, no shorts) and the risk gate. "
+    "Report every order and its outcome. ")
 CONFIRM_DOC = (
-    "Step 2 of 2 — send the prepared order to Interactive Brokers (paper by default; assistant limits apply). Tokens expire in ~90 s and are single-use."
-    if AUTONOMOUS else
-    "Step 2 of 2 — send the prepared order to Interactive Brokers. Only call this after the user explicitly approved the ticket from prepare_order. Tokens expire in ~90 s and are single-use.")
+    "Step 2 of 2 — submit the prepared order (paper by default; assistant limits apply). The answer says what happened: "
+    "status 'awaiting_approval' = not sent, the operator must approve it in the QOS Terminal (call again with the same token later: "
+    "the answer then carries approval = 'approved' with the order result, 'rejected' or 'expired'); "
+    "any other status is the order's state at Interactive Brokers. "
+    "Tickets expire ~90 s after prepare_order unless they are waiting for approval (5 minutes).")
 PREPARE_DOC = (
     "Step 1 of 2 — validate an order WITHOUT sending it. side: BUY|SELL. order_type: MKT|LMT|STP. qty in units/shares/coins. "
     "Crypto: pass cash_qty (USD amount) instead of qty for market buys — IBKR fills crypto market buys by cash amount. "
-    "Returns a ticket (token, reference price, notional USD, resulting position, risk checks). "
-    + ("Check it, then send it with confirm_order(token)." if AUTONOMOUS else
-       "Show it to the user; send only after they approve by calling confirm_order(token)."))
-CLOSE_DOC = ("Close one position at market (e.g. 'FX:EURUSD'). " +
-             ("" if AUTONOMOUS else "Ask the user before calling. ") + "Closing everything at once is not available to the assistant.")
+    "Returns a ticket (token, reference price, notional USD, resulting position, risk checks). Then call confirm_order(token).")
+CLOSE_DOC = ("Close one position at market (e.g. 'FX:EURUSD'); it only reduces exposure and is sent at once. "
+             "Closing everything at once is not available to the assistant.")
 mcp = MCPServer(
     "QOS Trading",
     instructions=(

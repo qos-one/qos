@@ -119,9 +119,20 @@ Switch it off: `ssh ENGINE 'systemctl --user disable --now qos-terminal.service'
 > Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
 
 Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsewhere can read the account and place
-orders (paper by default). The AI signs in as operator `remote_ai` (role `assistant`). The API enforces the limits
-whatever the AI is told: the assistant limits in the Terminal (order size, orders per hour, no shorts), the risk gate,
-and Manual mode for orders. Every order is in the audit log and pops up in the Terminal.
+orders (paper by default, live only if an admin turns it on). The AI signs in as operator `remote_ai` (role
+`assistant`). The API enforces the limits whatever the AI is told: the assistant limits in the Terminal (order size,
+orders per hour, no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in
+the Terminal.
+
+You choose what the AI may do in the Terminal, top bar → **AI**:
+
+| Mode | What the AI can do |
+|---|---|
+| Read-only (default) | Read the account. It cannot place orders. |
+| Ask first | Prepare orders. Each one waits for your approval in the Terminal (5 minutes), then is sent or dropped. |
+| Auto | Confirm its own orders without asking you. |
+
+Closing a position and cancelling an order only reduce exposure, so in Ask first and Auto they are done at once.
 
 1. DNS: an A record such as `mcp.example.com` → the engine server.
 2. On the server, once (root):
@@ -130,8 +141,8 @@ and Manual mode for orders. Every order is in the audit log and pops up in the T
    sudo QOS_MCP_DOMAIN=mcp.example.com bash /srv/qos/engine/bot/deploy/mcp-setup.sh
    ```
    It generates the bearer token and the operator PIN into `/srv/qos/home/.env` (nothing printed), starts `qos-mcp`
-   (127.0.0.1:8765) and adds the Caddy site. `MCP_AUTONOMOUS=1` (default) lets the AI confirm its own orders;
-   `MCP_AUTONOMOUS=0 ... mcp-setup.sh` makes it ask the user first.
+   (127.0.0.1:8765) and adds the Caddy site. The AI starts in Read-only: nothing is sent until you choose Ask first
+   or Auto in the Terminal.
 3. Check from your computer (no order is sent):
    ```
    export QOS_MCP_URL=https://mcp.example.com/mcp

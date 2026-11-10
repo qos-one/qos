@@ -180,6 +180,7 @@ DEFAULT_ASSISTANT = {        # limits for the LLM assistant (via MCP) — separa
     "allow_short": False,
     "allow_agents": True,            # may start/stop/configure agents
     "confirm_ttl_s": 90,
+    "auto_confirm": False,           # off = an operator approves each assistant order in the Terminal; on = the assistant confirms its own
 }
 DEFAULT_RISK = {
     "allow_live": False,
@@ -4045,9 +4046,40 @@ class ConfirmBody(BaseModel):
     token: str
 
 
+APPROVAL_TTL_S = 300                         # how long an assistant order waits for the operator (auto-confirm off)
+_ticket_done: dict[str, dict] = {}           # token → outcome of an approval (kept 15 min so the assistant can ask what happened)
+
+
+async def _await_approval(token: str, tk: dict) -> dict:
+    """Auto-confirm is off: keep the assistant's ticket and ask the operator in the Terminal"""
+    import time as _t
+    now = _t.time()
+    if not tk.get("awaiting"):
+        tk["awaiting"] = True
+        tk["expires"] = now + APPROVAL_TTL_S
+        r = tk["req"]
+        audit("order_awaiting_approval", token=token, key=tk["key"], side=r["side"], qty=r["qty"], notional=round(tk["notional"], 2))
+        text = f"AI assistant asks to {r['side']} {r['qty']:g} {tk['key']} {r['order_type']} ≈ {tk['notional']:,.0f} USD — approve or reject in the Terminal"
+        notify.fire(text, "order")
+        await ws_broadcast({"type": "assistant_ticket", "text": text, "ticket": _ticket_view(token, tk)})
+    return {"status": "awaiting_approval", "token": token, "expires_in_s": max(0, int(tk["expires"] - now)),
+            "message": "Not sent yet: AI auto-confirm is off, so the operator must approve this order in the Terminal. "
+                       "Tell the user, then call confirm_order with the same token again to see the outcome."}
+
+
 @app.post("/order/confirm")
 async def confirm_order(body: ConfirmBody):
     import time as _t
+    op0 = ops.current.get() or {}
+    for k in [k for k, v in _ticket_done.items() if _t.time() - v["ts"] > 900]:
+        _ticket_done.pop(k, None)
+    if op0.get("role") == "assistant":
+        done = _ticket_done.get(body.token)
+        if done:                                          # asked again after the operator decided
+            return {"approval": done["status"], "status": done["status"], **(done.get("result") or {})}
+        held = _tickets.get(body.token)
+        if held and held.get("role") == "assistant" and _t.time() <= held["expires"] and not load_assistant()["auto_confirm"]:
+            return await _await_approval(body.token, held)
     tk = _tickets.pop(body.token, None)
     if not tk:
         raise HTTPException(404, "unknown or already-used order token — call /order/prepare again")
@@ -4084,6 +4116,7 @@ class AssistantBody(BaseModel):
     allow_short: bool | None = None
     allow_agents: bool | None = None
     confirm_ttl_s: int | None = Field(default=None, ge=15, le=600)
+    auto_confirm: bool | None = None
 
 
 @app.get("/assistant")
@@ -4102,10 +4135,73 @@ async def put_assistant(body: AssistantBody):
         raise HTTPException(403, "Enable 'Allow live trading' first")
     save_assistant(upd)
     audit("assistant_settings", **upd)
-    if "write_enabled" in upd:
-        notify.fire(f"AI assistant trading {'ENABLED' if upd['write_enabled'] else 'disabled'}", "order")
-        await ws_broadcast({"type": "assistant_action", "text": f"AI assistant trading {'enabled' if upd['write_enabled'] else 'disabled'}"})
+    if "write_enabled" in upd or "auto_confirm" in upd:
+        a = load_assistant()
+        state = ("read-only" if not a["write_enabled"] else
+                 "may send orders on its own (auto-confirm ON)" if a["auto_confirm"] else "orders need your approval (ask first)")
+        notify.fire(f"AI assistant: {state}", "order")
+        await ws_broadcast({"type": "assistant_action", "text": f"AI assistant: {state}"})
     return await get_assistant()
+
+
+def _ticket_view(token: str, tk: dict) -> dict:
+    import time as _t
+    r = tk["req"]
+    return {"token": token, "key": tk["key"], "side": r["side"], "qty": r["qty"], "order_type": r["order_type"], "price": r.get("price"),
+            "reference_price": tk["ref"], "notional_usd": round(tk["notional"], 2), "account": tk["account"],
+            "operator": tk.get("operator", ""), "expires_in_s": max(0, int(tk["expires"] - _t.time()))}
+
+
+@app.get("/assistant/tickets")
+async def assistant_tickets():
+    """Assistant orders waiting for an operator's approval (auto-confirm off)"""
+    import time as _t
+    now = _t.time()
+    return {"tickets": [_ticket_view(k, t) for k, t in _tickets.items() if t.get("awaiting") and t["expires"] > now]}
+
+
+@app.post("/assistant/tickets/{token}/approve")
+async def assistant_ticket_approve(token: str):
+    """An operator (admin) approves an assistant order: it is sent now, through the same checks as any confirm"""
+    import time as _t
+    tk = _tickets.get(token)
+    if not tk or not tk.get("awaiting"):
+        raise HTTPException(404, "no assistant order is waiting under this token")
+    _tickets.pop(token, None)
+    if _t.time() > tk["expires"]:
+        _ticket_done[token] = {"status": "expired", "ts": _t.time()}
+        raise HTTPException(410, "the approval window has passed — the assistant must prepare the order again")
+    if tk["account"] != active_account():
+        raise HTTPException(409, "active account changed since the order was prepared")
+    if load_mode() != "manual":
+        raise HTTPException(409, "Manual trading is disabled while in Agent mode — switch to Manual, then approve")
+    a = load_assistant()
+    if not a["write_enabled"]:
+        raise HTTPException(403, "AI assistant is in read-only mode")
+    if tk["account"] and not tk["account"].startswith("D") and not a["live"]:
+        raise HTTPException(403, "AI assistant may only act on paper accounts")
+    r = tk["req"]
+    _assistant_orders.append(_t.time())
+    res = await submit_order("assistant", r["key"], r["side"], r["qty"], r["order_type"], r["price"], r["tif"], r["take_profit"], r["stop_loss"], r["trail_amount"], cash_qty=r.get("cash_qty"))
+    audit("order_approved", token=token, key=tk["key"], side=r["side"], qty=r["qty"], order_id=res.get("order_id"), prepared_by=tk.get("operator", ""))
+    _ticket_done[token] = {"status": "approved", "ts": _t.time(), "result": res}
+    text = f"AI assistant order approved: {r['side']} {r['qty']:g} {tk['key']} {r['order_type']} → {res.get('status')}"
+    notify.fire(text, "order")
+    await ws_broadcast({"type": "assistant_action", "text": text})
+    return res
+
+
+@app.post("/assistant/tickets/{token}/reject")
+async def assistant_ticket_reject(token: str):
+    import time as _t
+    tk = _tickets.get(token)
+    if not tk or not tk.get("awaiting"):
+        raise HTTPException(404, "no assistant order is waiting under this token")
+    _tickets.pop(token, None)
+    _ticket_done[token] = {"status": "rejected", "ts": _t.time()}
+    audit("order_rejected_by_operator", token=token, key=tk["key"], side=tk["req"]["side"], qty=tk["req"]["qty"])
+    await ws_broadcast({"type": "assistant_action", "text": f"AI assistant order rejected: {tk['req']['side']} {tk['req']['qty']:g} {tk['key']}"})
+    return {"token": token, "status": "rejected"}
 
 
 class ModifyRequest(BaseModel):

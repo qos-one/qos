@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run ON THE ENGINE SERVER as root, once: open the QOS MCP server to remote AI clients (Grok, ChatGPT) at https://<domain>/mcp
 #   QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh
-#   optional: MCP_AUTONOMOUS=0   the AI must ask before confirming its own orders (default 1: it may place orders on its own, paper by default)
+# What the AI may do is chosen in the Terminal (top bar → AI): Read-only, Ask first (default: you approve each order) or Auto.
 # Needs: Caddy already set up (deploy/terminal-setup.sh), the DNS A record of the domain pointing to this server.
 # Secrets are generated here and stay in /srv/qos/home/.env (mode 600); nothing is printed. Read the token on the server when
 # you configure the AI client: sudo grep MCP_BEARER_TOKEN /srv/qos/home/.env
@@ -9,7 +9,6 @@ set -euo pipefail
 : "${QOS_MCP_DOMAIN:?set QOS_MCP_DOMAIN=mcp.example.com}"
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 U=qos; CODE=/srv/qos/engine/bot; HOME_DIR=/srv/qos/home; ENVF="$HOME_DIR/.env"
-AUTO="${MCP_AUTONOMOUS:-1}"
 as_qos() { su - "$U" -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u) PATH=\$HOME/.local/bin:\$PATH QOS_HOME=$HOME_DIR; $*"; }
 setenv() {   # set KEY=VALUE in .env without printing it (replace or append)
   local k="$1" v="$2"
@@ -28,7 +27,6 @@ if ! grep -q '^ASSISTANT_PIN=.\+' "$ENVF"; then
   setenv ASSISTANT_PIN "$PIN"
   unset PIN
 fi
-setenv MCP_AUTONOMOUS "$AUTO"
 
 echo "== MCP service (qos-mcp)"
 as_qos "mkdir -p ~/.config/systemd/user && cp $CODE/deploy/systemd/qos-mcp.service ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable -q qos-mcp.service && systemctl --user restart qos-mcp.service"
@@ -51,5 +49,6 @@ echo "without token: HTTP $code (401 expected; 000 = no certificate yet: check D
 echo
 echo "Done. AI clients: server URL https://$QOS_MCP_DOMAIN/mcp, header Authorization: Bearer <MCP_BEARER_TOKEN>"
 echo "Read the token here, never paste it into a chat: sudo grep MCP_BEARER_TOKEN $ENVF"
-echo "Autonomous orders: MCP_AUTONOMOUS=$AUTO (paper by default; limits in the Terminal: AI assistant settings)"
+echo "By default the AI cannot send an order on its own: you approve each one in the Terminal (top bar: AI → Ask first)."
+echo "Choose AI → Auto there to let it confirm its own orders (paper by default, live only if an admin turns it on)."
 echo "Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice."

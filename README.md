@@ -74,9 +74,10 @@ IBKR account) works without it.
 
 > Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
 
-`mcp_server.py` lets an AI assistant read the account and place orders (paper by default) through
-the same risk checks as the Terminal, as an operator with role `assistant`, with limits on order
-size and orders per hour. On a server, `deploy/mcp-setup.sh` opens
+`mcp_server.py` lets an AI assistant read the account and place orders (paper by default, live
+only if an admin turns it on) through the same risk checks as the Terminal, as an operator with
+role `assistant`, with limits on order size and orders per hour. By default it is read-only; in
+the Terminal you choose **Ask first** (you approve each order) or **Auto** (it confirms its own). On a server, `deploy/mcp-setup.sh` opens
 it at `https://mcp.<your-domain>/mcp` for clients such as Grok or ChatGPT — see
 [deploy/README.md](deploy/README.md).
 

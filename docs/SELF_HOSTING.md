@@ -92,10 +92,14 @@ viewer to `localhost:5901`.
 
 > Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
 
-To let an AI client such as Grok (xAI API) or ChatGPT read the account and place orders (paper by default), open the
-MCP server on its own domain: `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an
-operator with role `assistant`: the assistant limits and the risk gate always apply. See the "Remote AI (MCP)" section
-of [deploy/README.md](../deploy/README.md).
+To let an AI client such as Grok (xAI API) or ChatGPT read the account and place orders (paper by default, live only
+if an admin turns it on), open the MCP server on its own domain:
+`sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an operator with role `assistant`: the
+assistant limits and the risk gate always apply.
+
+By default the AI cannot place orders. In the Terminal, top bar → **AI**, choose **Ask first** to approve each of its
+orders yourself, or **Auto** to let it confirm its own orders without asking you. See the "Remote AI (MCP)" section of
+[deploy/README.md](../deploy/README.md).
 
 ## Security notes
 
