@@ -23,7 +23,7 @@ and the Python developer kit (SDK). The Terminal is in
 | `qos/sdk/`, `qos/templates/`, `qos_sdk/` | Developer kit for writing your own strategies | Apache-2.0 |
 | `scripts/` | Backtest, walk-forward, data catalog and maintenance tools | AGPL-3.0-only |
 | `deploy/` | Server installer, systemd services, Caddy sites, operations guide | AGPL-3.0-only |
-| `mcp_server.py` | MCP server: AI assistants read the account and trade within your limits | AGPL-3.0-only |
+| `mcp_server.py` | MCP server (optional, experimental): AI assistants read the account and place orders (paper by default) within your limits | AGPL-3.0-only |
 
 ## Install on a server (recommended)
 
@@ -72,9 +72,11 @@ IBKR account) works without it.
 
 ## AI assistants (MCP)
 
-`mcp_server.py` lets an AI assistant read the account and place orders through the same risk
-checks as the Terminal, as an operator with role `assistant`: paper accounts only unless you turn
-on live, with limits on order size and orders per hour. On a server, `deploy/mcp-setup.sh` opens
+> Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
+
+`mcp_server.py` lets an AI assistant read the account and place orders (paper by default) through
+the same risk checks as the Terminal, as an operator with role `assistant`, with limits on order
+size and orders per hour. On a server, `deploy/mcp-setup.sh` opens
 it at `https://mcp.<your-domain>/mcp` for clients such as Grok or ChatGPT — see
 [deploy/README.md](deploy/README.md).
 

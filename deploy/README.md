@@ -116,10 +116,12 @@ Switch it off: `ssh ENGINE 'systemctl --user disable --now qos-terminal.service'
 
 ## Remote AI (MCP): Grok, ChatGPT and other AI clients
 
-Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsewhere can read the account and trade.
-The AI signs in as operator `remote_ai` (role `assistant`). The API enforces the limits whatever the AI is told:
-paper accounts only (unless an admin turns on live), the assistant limits in the Terminal (order size, orders per hour,
-no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in the Terminal.
+> Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
+
+Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsewhere can read the account and place
+orders (paper by default). The AI signs in as operator `remote_ai` (role `assistant`). The API enforces the limits
+whatever the AI is told: the assistant limits in the Terminal (order size, orders per hour, no shorts), the risk gate,
+and Manual mode for orders. Every order is in the audit log and pops up in the Terminal.
 
 1. DNS: an A record such as `mcp.example.com` → the engine server.
 2. On the server, once (root):

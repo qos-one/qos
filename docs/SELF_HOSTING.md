@@ -90,11 +90,12 @@ viewer to `localhost:5901`.
 
 ## Remote AI (optional)
 
-To let an AI client such as Grok (xAI API) or ChatGPT read the account and trade on paper, open the MCP server on its
-own domain: `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an operator with role
-`assistant`: paper accounts only unless you turn on live, the assistant limits and the risk gate always apply. See the
-"Remote AI (MCP)" section of [deploy/README.md](../deploy/README.md). Anything the AI reads (positions, P&L, account
-numbers) goes to the AI provider.
+> Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
+
+To let an AI client such as Grok (xAI API) or ChatGPT read the account and place orders (paper by default), open the
+MCP server on its own domain: `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an
+operator with role `assistant`: the assistant limits and the risk gate always apply. See the "Remote AI (MCP)" section
+of [deploy/README.md](../deploy/README.md).
 
 ## Security notes
 

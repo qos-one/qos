@@ -8,8 +8,8 @@ Run:
 Configure in .env:
   ASSISTANT_OPERATOR_ID=assistant  ASSISTANT_PIN=xxxx   (an operator with role=assistant created by an admin in Terminal → Risk → Security)
   MCP_BEARER_TOKEN=<random>          (http only: the client must send Authorization: Bearer <token>)
-  MCP_AUTONOMOUS=1                   the AI may confirm its own orders without asking (the API still allows paper accounts
-                                     only unless an admin enables live, and applies the assistant limits and the risk gate)
+  MCP_AUTONOMOUS=1                   the AI may confirm its own orders without asking (paper by default; the API still
+                                     applies the assistant limits and the risk gate)
 """
 from __future__ import annotations
 
@@ -84,11 +84,11 @@ HOST, PORT = os.getenv("MCP_HOST", "127.0.0.1"), int(os.getenv("MCP_PORT", "8765
 AUTONOMOUS = os.getenv("MCP_AUTONOMOUS", "") == "1"
 ORDER_RULE = (
     "You may confirm orders you prepared yourself, without asking first, when they follow the user's standing instructions; "
-    "QOS only lets you trade paper accounts and enforces the assistant limits (order size, orders per hour, no shorts) and the risk gate. "
+    "orders go to a paper account by default, and QOS enforces the assistant limits (order size, orders per hour, no shorts) and the risk gate. "
     "Report every order you send. " if AUTONOMOUS else
     "show it to the user and only call confirm_order after the user explicitly approves in this conversation. ")
 CONFIRM_DOC = (
-    "Step 2 of 2 — send the prepared order to Interactive Brokers (paper accounts only; assistant limits apply). Tokens expire in ~90 s and are single-use."
+    "Step 2 of 2 — send the prepared order to Interactive Brokers (paper by default; assistant limits apply). Tokens expire in ~90 s and are single-use."
     if AUTONOMOUS else
     "Step 2 of 2 — send the prepared order to Interactive Brokers. Only call this after the user explicitly approved the ticket from prepare_order. Tokens expire in ~90 s and are single-use.")
 PREPARE_DOC = (
