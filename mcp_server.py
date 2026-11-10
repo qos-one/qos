@@ -9,7 +9,7 @@ Configure in .env:
   ASSISTANT_OPERATOR_ID=assistant  ASSISTANT_PIN=xxxx   (an operator with role=assistant created by an admin in Terminal → Risk → Security)
   MCP_BEARER_TOKEN=<random>          (http only: the client must send Authorization: Bearer <token>)
 Whether the AI may send an order on its own is not set here: the operator chooses it in the Terminal (top bar → AI:
-Read-only / Ask first / Auto). The default is Ask first: every order waits for the operator's approval in the Terminal.
+Read-only / Ask first / Auto). The default is Read-only; with Ask first every order waits for the operator's approval in the Terminal.
 """
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ api = Api()
 HOST, PORT = os.getenv("MCP_HOST", "127.0.0.1"), int(os.getenv("MCP_PORT", "8765"))
 ORDER_RULE = (
     "what happens at confirm_order is the operator's choice in the QOS Terminal (the AI control in the top bar): "
-    "with 'Ask first' (the default) the order is NOT sent — it waits for the operator to approve it in the Terminal, so tell the user "
+    "with 'Read-only' (the default) orders are refused; with 'Ask first' the order is NOT sent — it waits for the operator to approve it in the Terminal, so tell the user "
     "and call confirm_order with the same token again to see the outcome; with 'Auto' it is sent at once. "
     "Orders go to a paper account by default, and QOS enforces the assistant limits (order size, orders per hour, no shorts) and the risk gate. "
     "Report every order and its outcome. ")
