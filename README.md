@@ -63,6 +63,43 @@ Check it is up with `curl localhost:8000/health`, then run the
 [Terminal](https://github.com/qos-one/qos-terminal) against it. Without `QOS_HOME`, QOS keeps
 its files next to the code (`data/`, `configs/`, `reports/`).
 
+## Your first backtest
+
+Backtests read bars from a local NautilusTrader catalog. With `QOS_HOME` exported in Quick
+start, that folder is `$QOS_HOME/data/catalog`. Without `QOS_HOME` it is `data/catalog`
+next to the code. `QOS_CATALOG` overrides either path. The repository includes no sample
+catalog. `scripts/backtest.py` reads this catalog only; a window with no bars stops with
+`no bars in catalog`.
+
+Before the first result:
+
+1. Use an Interactive Brokers **paper** account. `scripts/build_catalog.py` downloads bars
+   from the IB Gateway or Trader Workstation (TWS) session already logged in on this
+   machine. QOS does not create the account.
+2. Run Gateway or TWS on this machine with the socket API enabled. The script connects to
+   `127.0.0.1`. The port is the exported `IB_PORT` if set, otherwise the gateway profile
+   selected in the API session, otherwise the first saved profile, otherwise **4004**.
+   Pass `--port` for another local API port. Paper ports the engine already recognizes
+   are Gateway **4002**, **4004**, and TWS **7497**. A new gateway profile created in QOS
+   receives the next free port from **4010**.
+3. `uv sync` from Quick start is enough for the commands below. Redis and `uvicorn` serve
+   the API and the Terminal.
+
+The "(10–30 minutes)" note on the first command is the estimate in `scripts/build_catalog.py`
+("takes about 10–30 minutes"). IBKR historical-data pacing, and bars already in the catalog,
+change that run.
+
+```bash
+uv run scripts/build_catalog.py                  # FX 1m + 5m, one year back (10–30 minutes)
+uv run scripts/build_catalog.py --update         # later: add the latest bars
+uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --days 90
+uv run scripts/walkforward.py configs/strategies/ema_cross_eurusd_5m.json
+```
+
+`scripts/backtest.py` prints a summary for that window and writes the full result under
+`reports/backtests/` (under `QOS_HOME` when that is set, same rule as Quick start). The
+figures describe that past window on your catalog.
+
 ## QOS Cloud
 
 The `qos login`, `qos store`, `qos data pull` and other Cloud commands are clients for a hosted service that is not open
@@ -83,20 +120,8 @@ it at `https://mcp.<your-domain>/mcp` for clients such as Grok or ChatGPT — se
 
 ## Market data
 
-Backtests, walk-forward and the Store checks read bars from a local NautilusTrader data
-catalog. Build one from your IBKR account (IB Gateway must be running):
-
-```bash
-uv run scripts/build_catalog.py                  # FX 1m + 5m, one year back (10–30 minutes)
-uv run scripts/build_catalog.py --update         # add the latest bars
-```
-
-Then backtest the built-in EMA cross strategy:
-
-```bash
-uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --days 90
-uv run scripts/walkforward.py configs/strategies/ema_cross_eurusd_5m.json
-```
+Walk-forward and the Store checks read the same local catalog as
+[Your first backtest](#your-first-backtest).
 
 ## Write your own strategy
 
