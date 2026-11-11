@@ -5167,6 +5167,35 @@ async def put_ui(body: dict):
 
 
 # ---------- operators (who) + permissions ----------
+# Personal machine, no operator record yet. Only these clients are the local admin.
+# The Terminal sends a reqwest user agent and no source; the CLI and maintenance scripts set X-Source.
+_LOCAL_SOURCES = frozenset({"terminal", "qos-cli", "reset_node_books"})
+_AI_SOURCE_PREFIXES = ("mcp", "remote-ai", "remote_ai")
+
+
+def _legacy_operator(headers) -> dict:
+    """Role when nobody has signed in and no operator is configured.
+
+    Fail closed. The Terminal and the local CLI stay the admin. Any other caller is the
+    assistant: a normal MCP client, an older unit that still sends MCP_SOURCE=remote-ai,
+    or a caller that omits or replaces that marker. The marker can only lower privileges.
+    """
+    client = (headers.get("x-qos-client") or "").strip().lower()
+    source = (headers.get("x-source") or "").strip().lower()
+    base = source.split(":", 1)[0]
+    ua = (headers.get("user-agent") or "").strip().lower()
+    ai = (
+        bool(client)
+        or base.startswith(_AI_SOURCE_PREFIXES)
+        or "python-httpx" in ua or ua.startswith("httpx/")   # the MCP server's HTTP client, even with no marker
+        or bool((headers.get("x-request-id") or "").strip())  # mcp_server stamps this on every API call
+        or (bool(base) and base not in _LOCAL_SOURCES)
+    )
+    if not ai and (base in _LOCAL_SOURCES or ua.startswith("reqwest/")):
+        return {"id": "local", "name": "Local user", "role": "admin"}
+    return {"id": "local-ai", "name": "Local AI assistant", "role": "assistant"}
+
+
 @app.middleware("http")
 async def operator_guard(request, call_next):
     path = request.url.path
@@ -5186,13 +5215,7 @@ async def operator_guard(request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "no operator configured: run `qos operator add <name> --role admin` on the server"}, status_code=503)
         if not ops.public_mode():
-            # no operators set yet → legacy mode (personal machine): the Terminal and CLI are the local admin, but an AI
-            # never is. The MCP server marks its requests, so they get the assistant role and every assistant check.
-            # A forged marker can only lower the caller's rights.
-            from_mcp = (request.headers.get("x-qos-client", "").strip().lower() == "mcp"
-                        or request.headers.get("x-source", "").strip().lower().startswith("mcp"))
-            op = ({"id": "local-ai", "name": "Local AI assistant", "role": "assistant"} if from_mcp
-                  else {"id": "local", "name": "Local user", "role": "admin"})
+            op = _legacy_operator(request.headers)
     ops.current.set(op)
     _req_meta.set({"source": request.headers.get("x-source", "terminal")[:40], "request_id": request.headers.get("x-request-id", "")[:64]})
     if path in ops.PUBLIC or path.startswith("/docs"):

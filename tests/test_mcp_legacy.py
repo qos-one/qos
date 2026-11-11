@@ -1,5 +1,6 @@
-"""No operators configured (personal machine): a request from the MCP server is still a limited assistant, never the
-local admin. Read-only default, paper only, assistant limits and Ask first all apply. The Terminal and CLI stay admin."""
+"""No operators configured (personal machine): an AI caller is still a limited assistant, never the local admin.
+That includes a normal MCP header, the legacy remote-ai source, and a caller that omits or replaces the marker.
+Read-only default, paper only, assistant limits and Ask first all apply. The Terminal and CLI stay admin."""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -108,7 +109,7 @@ def test_mcp_orders_wait_for_approval_without_operators(legacy):
     r = c.post("/order/confirm", json={"token": t["token"]}, headers=MCP).json()
     assert r["status"] == "awaiting_approval" and not st["sent"]                          # Ask first: held, not sent
     assert c.post(f"/assistant/tickets/{t['token']}/approve", headers=MCP).status_code == 403     # the AI cannot approve itself
-    r = c.post(f"/assistant/tickets/{t['token']}/approve")                                # the local admin in the Terminal can
+    r = c.post(f"/assistant/tickets/{t['token']}/approve", headers={"User-Agent": "reqwest/0.12.9"})  # the Terminal can
     assert r.status_code == 200 and st["sent"] == [("assistant", "FX:EURUSD", "BUY", 20000.0)]
 
 
@@ -118,9 +119,52 @@ def test_old_mcp_server_is_recognised_by_its_source(legacy):
     assert r.status_code == 403 and "read-only" in r.json()["detail"]
 
 
+def _refused(r):
+    return r.status_code == 403 and "read-only" in r.json()["detail"]
+
+
+def test_omitted_identifying_header_is_not_admin(legacy):
+    S, c, st = legacy
+    assert _refused(c.post("/order/prepare", json=BUY))                                          # no X-QOS-Client, no X-Source
+    assert _refused(c.post("/order/prepare", json=BUY, headers={"User-Agent": "python-httpx/0.28.1"}))
+    assert c.post("/order", json=BUY).status_code == 403                                          # no direct submit
+    assert not S._tickets and not st["sent"]
+
+
+def test_legacy_remote_ai_source_is_the_assistant(legacy):
+    S, c, st = legacy
+    for headers in ({"X-Source": "remote-ai"}, {"X-Source": "remote-ai:grok"}, {"X-Source": "remote_ai"}):
+        assert _refused(c.post("/order/prepare", json=BUY, headers=headers))
+    # a local-looking source or client value does not raise privileges for the MCP client
+    assert _refused(c.post("/order/prepare", json=BUY, headers={"X-Source": "terminal", "User-Agent": "python-httpx/0.28.1"}))
+    assert _refused(c.post("/order/prepare", json=BUY, headers={"X-Source": "terminal", "X-Request-Id": "abc"}))
+    assert _refused(c.post("/order/prepare", json=BUY, headers={"X-QOS-Client": "admin", "X-Source": "terminal"}))
+    assert not st["sent"]
+
+
+def test_ai_callers_still_need_approval_when_writes_are_on(legacy):
+    S, c, st = legacy
+    S.save_assistant({"write_enabled": True})
+    t = c.post("/order/prepare", json=BUY, headers={"X-Source": "remote-ai"}).json()
+    r = c.post("/order/confirm", json={"token": t["token"]}, headers={"X-Source": "remote-ai"}).json()
+    assert r["status"] == "awaiting_approval" and not st["sent"]
+    assert c.post("/order", json=BUY).status_code == 403                                          # omitted marker: no direct submit
+    assert not st["sent"]
+
+
+def test_normal_ai_header_stays_the_assistant(legacy):
+    S, c, st = legacy
+    assert _refused(c.post("/order/prepare", json=BUY, headers=MCP))
+    assert _refused(c.post("/order/prepare", json=BUY, headers={"X-QOS-Client": "mcp", "X-Source": "remote-ai"}))
+    assert not st["sent"]
+
+
 def test_terminal_and_cli_stay_local_admin_without_operators(legacy):
     S, c, st = legacy
-    assert c.put("/assistant", json={"write_enabled": False}).status_code == 200          # admin-only route, AI still Read-only
+    term = {"User-Agent": "reqwest/0.12.9"}                                 # desktop and web Terminal: no AI marker
+    assert c.put("/assistant", json={"write_enabled": False}, headers=term).status_code == 200
+    cli = {"X-Source": "qos-cli"}
+    assert c.put("/assistant", json={"write_enabled": False}, headers=cli).status_code == 200
     t = c.post("/order/prepare", json=BUY, headers={"X-Source": "terminal"})
     assert t.status_code == 200 and "assistant limits ok" not in t.json().get("checks", [])
     r = c.post("/order/confirm", json={"token": t.json()["token"]}, headers={"X-Source": "terminal"})

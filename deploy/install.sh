@@ -96,6 +96,8 @@ step "services"
 as_qos "mkdir -p ~/.config/systemd/user && cp $CODE/deploy/systemd/*.service $CODE/deploy/systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload"
 as_qos "systemctl --user enable -q qos-catalog.timer qos-watchdog.timer qos-api.service && systemctl --user restart qos-api.service && systemctl --user start qos-catalog.timer qos-watchdog.timer"
 if [[ -n "$DOMAIN" ]]; then as_qos "systemctl --user enable -q qos-terminal.service && systemctl --user restart qos-terminal.service"; fi
+# qos-mcp is optional (mcp-setup). Restart it when it is already running so an update does not leave the old process up.
+as_qos "if systemctl --user is-active -q qos-mcp.service; then systemctl --user restart qos-mcp.service && echo mcp restarted; fi"
 for _ in $(seq 1 30); do curl -fsS -o /dev/null 127.0.0.1:8000/health 2>/dev/null && break; sleep 2; done
 echo "api: $(curl -fsS 127.0.0.1:8000/health 2>/dev/null | head -c 60 || echo 'not answering yet — journalctl --user -u qos-api (as qos)')"
 
