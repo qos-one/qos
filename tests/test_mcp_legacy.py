@@ -1,13 +1,23 @@
-"""No operators configured (personal machine): an AI caller is still a limited assistant, never the local admin.
-That includes a normal MCP header, the legacy remote-ai source, and a caller that omits or replaces the marker.
-Read-only default, paper only, assistant limits and Ask first all apply. The Terminal and CLI stay admin."""
+"""No operators configured (personal machine): admin is the local token file, not a request header.
+
+A caller with no token, a spoofed X-Source or User-Agent, or an MCP marker is the assistant.
+Read-only default, paper only, assistant limits and Ask first all apply. A valid local token
+is the local admin, except on the MCP path, which stays the assistant even with that token.
+"""
 import pytest
 from fastapi.testclient import TestClient
+from starlette.datastructures import Headers
 
 from api import operators as ops
+from qos.local_token import HEADER
 
 MCP = {"X-QOS-Client": "mcp", "X-Source": "mcp"}
 BUY = {"key": "FX:EURUSD", "side": "BUY", "qty": 20000}
+
+
+def _admin_headers(**extra):
+    from qos.local_token import read_token
+    return {HEADER: read_token(), **extra}
 
 
 @pytest.fixture
@@ -15,6 +25,9 @@ def legacy(tmp_path, monkeypatch):
     monkeypatch.setattr(ops, "OPS_FILE", tmp_path / "operators.json")
     monkeypatch.setattr(ops, "DATA_DIR", tmp_path)
     monkeypatch.delenv("QOS_PUBLIC_TERMINAL", raising=False)
+    monkeypatch.setenv("QOS_LOCAL_TOKEN_FILE", str(tmp_path / "local_token"))
+    from qos.local_token import ensure_local_token
+    ensure_local_token()
     ops._tokens.clear()
     from api import server as S
     for name, f in (("RISK_FILE", "risk.json"), ("AUDIT_FILE", "audit.jsonl"), ("MODE_FILE", "mode.json")):
@@ -109,7 +122,7 @@ def test_mcp_orders_wait_for_approval_without_operators(legacy):
     r = c.post("/order/confirm", json={"token": t["token"]}, headers=MCP).json()
     assert r["status"] == "awaiting_approval" and not st["sent"]                          # Ask first: held, not sent
     assert c.post(f"/assistant/tickets/{t['token']}/approve", headers=MCP).status_code == 403     # the AI cannot approve itself
-    r = c.post(f"/assistant/tickets/{t['token']}/approve", headers={"User-Agent": "reqwest/0.12.9"})  # the Terminal can
+    r = c.post(f"/assistant/tickets/{t['token']}/approve", headers=_admin_headers())            # the local token can
     assert r.status_code == 200 and st["sent"] == [("assistant", "FX:EURUSD", "BUY", 20000.0)]
 
 
@@ -159,21 +172,111 @@ def test_normal_ai_header_stays_the_assistant(legacy):
     assert not st["sent"]
 
 
-def test_terminal_and_cli_stay_local_admin_without_operators(legacy):
+def test_valid_local_token_is_admin_without_operators(legacy):
     S, c, st = legacy
-    term = {"User-Agent": "reqwest/0.12.9"}                                 # desktop and web Terminal: no AI marker
-    assert c.put("/assistant", json={"write_enabled": False}, headers=term).status_code == 200
-    cli = {"X-Source": "qos-cli"}
+    assert c.put("/assistant", json={"write_enabled": True}, headers=_admin_headers()).status_code == 200
+    assert S.load_assistant()["write_enabled"] is True                                  # switch AI mode
+    cli = _admin_headers(**{"X-Source": "qos-cli"})
     assert c.put("/assistant", json={"write_enabled": False}, headers=cli).status_code == 200
-    t = c.post("/order/prepare", json=BUY, headers={"X-Source": "terminal"})
+    t = c.post("/order/prepare", json=BUY, headers=_admin_headers())
     assert t.status_code == 200 and "assistant limits ok" not in t.json().get("checks", [])
-    r = c.post("/order/confirm", json={"token": t.json()["token"]}, headers={"X-Source": "terminal"})
+    r = c.post("/order/confirm", json={"token": t.json()["token"]}, headers=_admin_headers())
     assert r.status_code == 200 and r.json()["status"] == "Filled" and st["sent"] == [("manual", "FX:EURUSD", "BUY", 20000.0)]
+    assert c.post("/order", json=BUY, headers=_admin_headers()).status_code == 200
 
 
-def test_mcp_server_always_sends_the_marker(monkeypatch):
+def test_no_token_or_spoofed_headers_are_the_assistant(legacy):
+    S, c, st = legacy
+    from api.server import _legacy_operator
+    spoofed = (
+        [(b"accept", b"*/*")],
+        [(b"x-source", b"terminal")],
+        [(b"x-source", b"qos-cli")],
+        [(b"x-source", b"reset_node_books")],
+        [(b"user-agent", b"reqwest/0.12.28")],
+        [(b"user-agent", b"reqwest/0.12.9"), (b"x-source", b"terminal")],
+        [(b"user-agent", b"python-httpx/0.28.1"), (b"x-source", b"terminal")],
+    )
+    for raw in spoofed:
+        assert _legacy_operator(Headers(raw=raw))["role"] == "assistant"
+        headers = {k.decode(): v.decode() for k, v in raw}
+        assert _refused(c.post("/order/prepare", json=BUY, headers=headers))
+    assert c.post("/order", json=BUY, headers={"User-Agent": "reqwest/0.12.28", "X-Source": "terminal"}).status_code == 403
+    wrong = _admin_headers()
+    wrong[HEADER] = wrong[HEADER][:8]
+    assert _refused(c.post("/order/prepare", json=BUY, headers=wrong))
+    assert not st["sent"]
+
+
+def test_mcp_path_is_never_admin_even_with_the_local_token(legacy):
+    S, c, st = legacy
+    from api.server import _legacy_operator
+    tok = _admin_headers()[HEADER].encode()
+    marked = (
+        [(b"x-qos-client", b"mcp"), (b"x-source", b"mcp"), (b"x-qos-local-token", tok)],
+        [(b"x-source", b"mcp:claude-desktop"), (b"x-qos-local-token", tok)],
+        [(b"x-source", b"remote-ai"), (b"x-qos-local-token", tok)],
+        [(b"x-source", b"remote_ai:grok"), (b"x-qos-local-token", tok)],
+        [(b"user-agent", b"reqwest/0.12.28"), (b"x-qos-client", b"mcp"), (b"x-qos-local-token", tok)],
+    )
+    for raw in marked:
+        assert _legacy_operator(Headers(raw=raw))["role"] == "assistant"
+    both = {**MCP, **_admin_headers()}
+    assert c.put("/assistant", json={"write_enabled": True}, headers=both).status_code == 403
+    assert c.post("/order", json=BUY, headers=both).status_code == 403
+    assert _refused(c.post("/order/prepare", json=BUY, headers=both))
+    assert S.load_assistant()["write_enabled"] is False and not st["sent"]
+
+
+def test_local_token_does_not_bypass_a_configured_operator(legacy):
+    S, c, st = legacy
+    ops.create("Ann", "admin", "1234")
+    assert c.put("/assistant", json={"write_enabled": True}, headers=_admin_headers()).status_code == 401
+    assert S.load_assistant()["write_enabled"] is False
+
+
+# Captured from reqwest 0.12.28 built the same way as qos-terminal src/api.rs client()/send()
+# (Client::builder().default_headers(empty x-operator-token).timeout(15s), then .json()).
+# The request carried accept, content-type and an empty x-operator-token. No User-Agent, no X-Source.
+TERMINAL_WIRE = [
+    (b"content-type", b"application/json"),
+    (b"accept", b"*/*"),
+    (b"x-operator-token", b""),
+]
+
+
+def test_real_terminal_wire_headers_need_the_local_token(legacy):
+    S, c, st = legacy
+    from api.server import _legacy_operator
+    assert _legacy_operator(Headers(raw=TERMINAL_WIRE))["role"] == "assistant"
+    as_http = {k.decode(): v.decode() for k, v in TERMINAL_WIRE}
+    assert _refused(c.post("/order/prepare", json=BUY, headers=as_http))
+    assert c.put("/assistant", json={"write_enabled": True}, headers=as_http).status_code == 403
+    tok = _admin_headers()[HEADER].encode()
+    authed = Headers(raw=[*TERMINAL_WIRE, (b"x-qos-local-token", tok)])
+    assert _legacy_operator(authed)["role"] == "admin"
+    sent = {**as_http, HEADER: tok.decode()}
+    assert c.put("/assistant", json={"write_enabled": True}, headers=sent).status_code == 200
+    t = c.post("/order/prepare", json=BUY, headers=sent)
+    assert t.status_code == 200 and "assistant limits ok" not in t.json().get("checks", [])
+    r = c.post("/order/confirm", json={"token": t.json()["token"]}, headers=sent)
+    assert r.status_code == 200 and r.json()["status"] == "Filled"
+    assert st["sent"] == [("manual", "FX:EURUSD", "BUY", 20000.0)]
+    assert c.post("/assistant/tickets/nope/approve", headers=as_http).status_code == 403
+
+
+def test_mcp_server_always_sends_the_marker(monkeypatch, tmp_path):
     import mcp_server
+    from pathlib import Path
+    monkeypatch.setenv("QOS_LOCAL_TOKEN_FILE", str(tmp_path / "local_token"))
+    from qos.local_token import ensure_local_token
+    ensure_local_token()
     h = mcp_server.Api()._h()
     assert h["X-QOS-Client"] == "mcp" and h["X-Operator-Token"] == ""
+    assert HEADER not in h and all(k.lower() != HEADER.lower() for k in h)
     monkeypatch.setattr(mcp_server, "SOURCE", "renamed")
-    assert mcp_server.Api()._h("grok")["X-QOS-Client"] == "mcp"                           # independent of MCP_SOURCE
+    sent = mcp_server.Api()._h("grok")
+    assert sent["X-QOS-Client"] == "mcp" and HEADER not in sent                         # independent of MCP_SOURCE
+    src = Path(mcp_server.__file__).read_text()
+    assert "local_token" not in src and "QOS_LOCAL_TOKEN" not in src
+    assert "x-qos-local-token" not in src.lower()

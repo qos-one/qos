@@ -50,6 +50,9 @@ def test_no_operator_means_no_access(public, monkeypatch):
     r = c.get("/risk")
     assert r.status_code == 503 and "qos operator add" in r.json()["detail"]
     assert c.get("/operators/status").status_code == 200                       # sign-in page still loads
+    from qos.local_token import HEADER, ensure_local_token
+    tok = ensure_local_token()
+    assert c.put("/assistant", json={"write_enabled": True}, headers={HEADER: tok}).status_code == 503
 
 
 def test_personal_machine_keeps_legacy_mode(public, monkeypatch):

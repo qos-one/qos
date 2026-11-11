@@ -74,10 +74,15 @@ def test_init_home_creates_layout_without_overwriting(tmp_path):
     env = h / ".env"
     assert env.exists() and stat.S_IMODE(env.stat().st_mode) == 0o600
     assert "TELEGRAM_BOT_TOKEN=" in env.read_text() and ".env" in r["created"]
+    token = h / "data" / "local_token"
+    assert token.is_file() and stat.S_IMODE(token.stat().st_mode) == 0o600 and "data/local_token" in r["created"]
+    secret = token.read_text()
+    assert secret.strip() and "\n" not in secret.strip()
     assert any((h / "configs" / "strategies").glob("*.json"))
     env.write_text("TELEGRAM_BOT_TOKEN=mine\n")
     r2 = paths.init_home(h, log=lambda *_: None)
     assert r2["created"] == [] and env.read_text() == "TELEGRAM_BOT_TOKEN=mine\n"
+    assert token.read_text() == secret                                                  # a second init does not rotate it
 
 
 def test_cli_home_show(clean_env, tmp_path, capsys):

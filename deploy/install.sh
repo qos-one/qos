@@ -66,7 +66,7 @@ if [[ -d "$CODE/.git" ]]; then as_qos "git -C $CODE pull --ff-only -q"; else as_
 as_qos "git -C $CODE log -1 --format='%h %s'"
 [[ -x /home/$U/.local/bin/uv ]] || as_qos "curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null"
 as_qos "cd $CODE && uv sync --frozen --no-dev -q && uv run --frozen python -c 'import nautilus_trader as n; print(\"python ok · nautilus\", n.__version__)'"
-as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && echo 'QOS_HOME ready: $HOME_DIR'"
+as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && chmod 600 $HOME_DIR/data/local_token && echo 'QOS_HOME ready: $HOME_DIR'"
 
 step "Redis (Docker, 127.0.0.1:6379)"
 as_qos "cd $CODE && docker compose up -d redis >/dev/null 2>&1 && sleep 2 && echo \"redis: \$(docker compose exec -T redis redis-cli ping </dev/null)\""

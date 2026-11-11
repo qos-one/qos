@@ -1608,6 +1608,12 @@ def _on_order_status(trade):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global IB_PORT, _main_loop
+    try:   # personal machine, no operator yet: the Terminal and local CLI prove themselves with this file
+        from qos.local_token import ensure_local_token, token_path
+        ensure_local_token()
+        print("local token file:", token_path())
+    except Exception as e:
+        print("local token file:", e)
     IB_PORT = gateway_port()   # port of the selected gateway profile (paper/live/different user)
     try:
         await ensure_connected()
@@ -5167,31 +5173,28 @@ async def put_ui(body: dict):
 
 
 # ---------- operators (who) + permissions ----------
-# Personal machine, no operator record yet. Only these clients are the local admin.
-# The Terminal sends a reqwest user agent and no source; the CLI and maintenance scripts set X-Source.
-_LOCAL_SOURCES = frozenset({"terminal", "qos-cli", "reset_node_books"})
+# Personal machine, no operator record yet. Admin is the local token file, not a request header.
 _AI_SOURCE_PREFIXES = ("mcp", "remote-ai", "remote_ai")
+
+
+def _mcp_caller(headers) -> bool:
+    """True when the caller marks itself as the MCP server. A marker only lowers privileges."""
+    client = (headers.get("x-qos-client") or "").strip().lower()
+    source = (headers.get("x-source") or "").strip().lower()
+    base = source.split(":", 1)[0]
+    return client == "mcp" or base.startswith(_AI_SOURCE_PREFIXES)
 
 
 def _legacy_operator(headers) -> dict:
     """Role when nobody has signed in and no operator is configured.
 
-    Fail closed. The Terminal and the local CLI stay the admin. Any other caller is the
-    assistant: a normal MCP client, an older unit that still sends MCP_SOURCE=remote-ai,
-    or a caller that omits or replaces that marker. The marker can only lower privileges.
+    Fail closed. The local admin is a caller that presents the token from the data
+    directory (constant-time compare). Everyone else is the assistant, including a
+    caller that only sets X-Source or a User-Agent. An MCP marker stays the assistant
+    even if that token is also present. With QOS_PUBLIC_TERMINAL=1 this path is not used.
     """
-    client = (headers.get("x-qos-client") or "").strip().lower()
-    source = (headers.get("x-source") or "").strip().lower()
-    base = source.split(":", 1)[0]
-    ua = (headers.get("user-agent") or "").strip().lower()
-    ai = (
-        bool(client)
-        or base.startswith(_AI_SOURCE_PREFIXES)
-        or "python-httpx" in ua or ua.startswith("httpx/")   # the MCP server's HTTP client, even with no marker
-        or bool((headers.get("x-request-id") or "").strip())  # mcp_server stamps this on every API call
-        or (bool(base) and base not in _LOCAL_SOURCES)
-    )
-    if not ai and (base in _LOCAL_SOURCES or ua.startswith("reqwest/")):
+    from qos.local_token import HEADER, matches
+    if not _mcp_caller(headers) and matches(headers.get(HEADER)):
         return {"id": "local", "name": "Local user", "role": "admin"}
     return {"id": "local-ai", "name": "Local AI assistant", "role": "assistant"}
 

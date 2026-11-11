@@ -10,6 +10,7 @@ EnvironmentFile=-/srv/qos/terminal.env
 Environment=IP=127.0.0.1
 Environment=PORT=8080
 Environment=BOT_API=http://127.0.0.1:8000
+Environment=QOS_HOME=/srv/qos/home
 Environment=QOS_PUBLIC_TERMINAL=1
 Environment=QOS_WS_URL=/ws
 ExecStart=/srv/qos/terminal/current/server

@@ -135,12 +135,15 @@ def run_checks(path: Path, bars: str = "auto", days: int = 30, catalog: str | No
 
 
 def api_call(method: str, path: str, body: dict | None = None, api: str | None = DEFAULT_API, timeout: float = 30) -> dict | None:
-    """Call the QOS API (None = API not running) · sends QOS_OPERATOR_TOKEN if set"""
+    """Call the QOS API (None = API not running) · sends the local token, and QOS_OPERATOR_TOKEN if set"""
     if not api:
         return None
+    from qos.local_token import client_headers
+    headers = {"Content-Type": "application/json", "X-Source": "qos-cli", **client_headers()}
+    if os.getenv("QOS_OPERATOR_TOKEN"):
+        headers["X-Operator-Token"] = os.environ["QOS_OPERATOR_TOKEN"]
     req = urllib.request.Request(api.rstrip("/") + path, method=method, data=json.dumps(body or {}).encode() if method != "GET" else None,
-                                 headers={"Content-Type": "application/json", "X-Source": "qos-cli",
-                                          **({"X-Operator-Token": os.environ["QOS_OPERATOR_TOKEN"]} if os.getenv("QOS_OPERATOR_TOKEN") else {})})
+                                 headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read() or b"{}")
