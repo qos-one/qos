@@ -3,7 +3,7 @@
 $label — a QOS strategy package (`qos new $name`).
 
 ```
-pip install qos-sdk
+pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk"
 pytest tests
 qos install .
 ```
