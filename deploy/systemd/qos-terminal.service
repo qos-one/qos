@@ -6,6 +6,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/srv/qos/terminal/current
+# Engine env first (QOS_HOME, QOS_LOCAL_TOKEN_FILE, QOS_TRUSTED_ORIGINS), then the Terminal
+# file, which wins on duplicate keys. Caddy forwards the public Host; without these the
+# Terminal answers GET / with 403. Both files are optional so a missing one does not fail the unit.
+EnvironmentFile=-/srv/qos/deploy.env
 EnvironmentFile=-/srv/qos/terminal.env
 Environment=IP=127.0.0.1
 Environment=PORT=8080

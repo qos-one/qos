@@ -2,7 +2,7 @@
 # Run ON YOUR COMPUTER: copy the engine code to the VPS, install Python packages, install/refresh the systemd user services.
 # Copies code only: never .env, data/, reports/ or IB Gateway settings (those stay on the server).
 #   QOS_ENGINE_HOST=qos@<server-ip> deploy/deploy-engine.sh            install / update, does not start or restart anything
-#   RESTART=1 QOS_ENGINE_HOST=... deploy/deploy-engine.sh              also restart the API if it is running (nodes keep running)
+#   RESTART=1 QOS_ENGINE_HOST=... deploy/deploy-engine.sh              restart qos-api, then qos-mcp, then qos-terminal, when each is running (nodes keep running)
 #   TESTS=1 ...                                                         run the test suite on the server after installing
 set -euo pipefail
 BOT="${0:A:h:h}"
@@ -32,8 +32,11 @@ if [ "$TESTS" = 1 ]; then
   else uv sync --frozen </dev/null >/dev/null && (QOS_HOME=$(mktemp -d) uv run --frozen pytest -q </dev/null 2>&1 | tail -3) || true; uv sync --frozen --no-dev </dev/null >/dev/null; fi
 fi
 if systemctl --user is-active -q qos-api.service; then
-  if [ "$RESTART" = 1 ]; then systemctl --user restart qos-api.service && echo "api restarted"; else echo "api running (not restarted; RESTART=1 to restart)"; fi
-  if systemctl --user is-active -q qos-mcp.service && [ "$RESTART" = 1 ]; then systemctl --user restart qos-mcp.service && echo "mcp restarted"; fi
+  if [ "$RESTART" = 1 ]; then
+    systemctl --user restart qos-api.service && echo "api restarted"
+    if systemctl --user is-active -q qos-mcp.service; then systemctl --user restart qos-mcp.service && echo "mcp restarted"; fi
+    if systemctl --user is-active -q qos-terminal.service; then systemctl --user restart qos-terminal.service && echo "terminal restarted"; fi
+  else echo "api running (not restarted; RESTART=1 to restart)"; fi
 else
   echo "api not started yet (start it at cut-over: systemctl --user start qos-api.service)"
 fi

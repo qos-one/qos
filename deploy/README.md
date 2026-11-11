@@ -93,12 +93,19 @@ Adding it to an existing server:
    ```
    ssh -t ENGINE 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen python -m qos.cli operator add <name> --role admin'
    ```
-3. API settings: add to `/srv/qos/deploy.env`, then restart the API (nodes keep running):
+3. Host settings. Caddy forwards the public Host to the Terminal, which answers only for loopback or a listed host.
+   `deploy/terminal-setup.sh` writes these (install.sh does too). `/srv/qos/deploy.env` is read by the API and the Terminal:
    ```
    QOS_PUBLIC_TERMINAL=1
    QOS_TRUSTED_ORIGINS=https://terminal.<domain>
    ```
-   `ssh ENGINE 'systemctl --user restart qos-api.service'`
+   `/srv/qos/terminal.env` is the Terminal's own file (it overrides deploy.env):
+   ```
+   QOS_TRUSTED_ORIGINS=https://terminal.<domain>
+   QOS_TERMINAL_HOST=terminal.<domain>
+   ```
+   If the installer was given `QOS_LOCAL_TOKEN_FILE`, that path is stored in `deploy.env` as well.
+   Restart in this order (nodes keep running): `qos-api`, then `qos-mcp` if it is running, then `qos-terminal`.
 4. Caddy and firewall, as root, once (`QOS_ALLOW_IPS` is optional: only these addresses may open the Terminal):
    ```
    ssh root@<server-ip> 'cd /srv/qos/engine/bot/deploy && QOS_TERMINAL_DOMAIN=terminal.<domain> ACME_EMAIL=<you@domain> bash terminal-setup.sh'
@@ -161,4 +168,4 @@ Closing a position and cancelling an order only reduce exposure, so in Ask first
 
 Stop it: `systemctl --user disable --now qos-mcp` (as qos). New token: delete the `MCP_BEARER_TOKEN` line in
 `/srv/qos/home/.env`, run `mcp-setup.sh` again, update the AI client. Read-only for a while: turn off trading for the
-AI assistant in the Terminal. Updates: run `sudo bash deploy/install.sh` again, or `RESTART=1 deploy/deploy-engine.sh`. Both restart `qos-mcp` when it is running.
+AI assistant in the Terminal. Updates: run `sudo bash deploy/install.sh` again, or `RESTART=1 deploy/deploy-engine.sh`. Both restart `qos-api`, then `qos-mcp` when it is running, then `qos-terminal` when it is running.

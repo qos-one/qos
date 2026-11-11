@@ -47,8 +47,11 @@ and your data in `/srv/qos/home`; starts Redis and the services (`qos-api`, `qos
 `qos-watchdog.timer`, and `qos-terminal` for option A); turns on the firewall (SSH, plus 80/443 for option A); and,
 for option A, downloads the web Terminal from the
 [qos-terminal releases](https://github.com/qos-one/qos-terminal/releases) (checksum verified) and sets up Caddy for
-HTTPS. At the end it asks for the first admin name and a PIN (8+ characters for option A). The PIN is typed on the
-server and never leaves it.
+HTTPS. Caddy forwards the site's Host, so option A writes `QOS_TRUSTED_ORIGINS` and `QOS_TERMINAL_HOST` to
+`/srv/qos/terminal.env` (and the origin to `/srv/qos/deploy.env`). The Terminal service loads `deploy.env`, then
+`terminal.env`. An update restarts `qos-api`, then `qos-mcp` if it is running, then `qos-terminal`. At the end the
+script asks for the first admin name and a PIN (8+ characters for option A). The PIN is typed on the server and
+never leaves it.
 
 ## First sign-in
 
