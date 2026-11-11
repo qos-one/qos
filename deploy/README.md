@@ -156,4 +156,4 @@ Closing a position and cancelling an order only reduce exposure, so in Ask first
 
 Stop it: `systemctl --user disable --now qos-mcp` (as qos). New token: delete the `MCP_BEARER_TOKEN` line in
 `/srv/qos/home/.env`, run `mcp-setup.sh` again, update the AI client. Read-only for a while: turn off trading for the
-AI assistant in the Terminal. Updates: `RESTART=1 deploy/deploy-engine.sh` also restarts `qos-mcp`.
+AI assistant in the Terminal. Updates: run `sudo bash deploy/install.sh` again, or `RESTART=1 deploy/deploy-engine.sh`. Both restart `qos-mcp` when it is running.
