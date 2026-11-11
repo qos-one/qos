@@ -124,10 +124,11 @@ orders (paper by default, live only if an admin turns it on). The AI signs in as
 orders per hour, no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in
 the Terminal. On a personal machine with no operators, a caller is that assistant unless it sends the local
 token (`X-QOS-Local-Token`) from `data/local_token` (mode 0600, created at install and on the API's first start).
-The Terminal and the `qos` CLI read that file; the MCP server does not. `X-Source` and `User-Agent` do not grant
-admin. Once an operator exists, sign-in is the operator PIN and this token is not a substitute. With
-`QOS_PUBLIC_TERMINAL=1` an operator is required either way. A Terminal that does not send the token yet stays
-read-only until it is updated, or until you create an operator.
+The Terminal and the `qos` CLI read that file; the MCP server is not given it. `X-Source` and `User-Agent` do not grant
+admin. A process running as the same OS user can still read the file: create an operator before connecting an AI that
+has shell access, or run `qos-mcp` as a separate user. Once an operator exists, sign-in is the operator PIN and this
+token is not a substitute. With `QOS_PUBLIC_TERMINAL=1` an operator is required either way. A Terminal that does not
+send the token yet stays read-only until it is updated, or until you create an operator.
 
 You choose what the AI may do in the Terminal, top bar → **AI**:
 

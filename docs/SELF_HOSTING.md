@@ -97,7 +97,7 @@ if an admin turns it on), open the MCP server on its own domain:
 `sudo QOS_MCP_DOMAIN=mcp.example.com bash deploy/mcp-setup.sh`. The AI acts as an operator with role `assistant`: the
 assistant limits and the risk gate always apply. On a personal machine with no operators, a caller is that assistant
 unless it sends the local token from `data/local_token` (see Security notes). The MCP server is not given that token.
-`X-Source` and `User-Agent` do not grant admin.
+`X-Source` and `User-Agent` do not grant admin. A process that can read the file is a different case: see Security notes.
 
 By default the AI cannot place orders. In the Terminal, top bar → **AI**, choose **Ask first** to approve each of its
 orders yourself, or **Auto** to let it confirm its own orders without asking you. See the "Remote AI (MCP)" section of
@@ -107,11 +107,14 @@ orders yourself, or **Auto** to let it confirm its own orders without asking you
 
 - Only SSH (and 80/443 for option A) are open. The API, Redis, IB Gateway and VNC listen on 127.0.0.1.
 - No operators yet (a personal machine): the API keeps `data/local_token` (mode 0600) under `QOS_HOME`, or in the
-  engine data directory when `QOS_HOME` is not set. The Terminal and the `qos` command send it as
-  `X-QOS-Local-Token` and are the local admin. Other callers, including the AI, are the assistant. The value is not
-  put in `.env`. A Terminal on another computer (the SSH tunnel) needs a copy of that file and `QOS_LOCAL_TOKEN_FILE`
-  pointing at the copy. `qos operator add` switches the machine to PIN sign-in; the file then no longer grants admin.
-  With `QOS_PUBLIC_TERMINAL=1` an operator is required either way.
+  engine data directory when `QOS_HOME` is not set (`QOS_LOCAL_TOKEN_FILE` overrides the path). The Terminal and the
+  `qos` command send it as `X-QOS-Local-Token` and are the local admin. The MCP server is not given the file, and a
+  caller that does not send the token is the assistant. `X-Source` and `User-Agent` do not grant admin. This does
+  not hold for a process running as the same OS user with shell access: it can read the file. Create an operator
+  with `qos operator add` before connecting an AI that has shell access (PIN sign-in; the file then no longer grants
+  admin), or run `qos-mcp` as a separate user. The value is not put in `.env`. A Terminal on another computer (the
+  SSH tunnel) needs a copy of that file and `QOS_LOCAL_TOKEN_FILE` pointing at the copy. With
+  `QOS_PUBLIC_TERMINAL=1` an operator is required either way.
 - Option A runs with `QOS_PUBLIC_TERMINAL=1`: nothing works until an operator exists, the first admin can only be
   created on the server, PINs are 8+ characters, sign-in locks after repeated failures, every browser has its own
   session (HttpOnly cookie) and the live stream needs a signed-in operator.

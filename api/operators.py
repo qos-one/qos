@@ -193,6 +193,9 @@ WRITE_RULES = [   # (prefix, roles allowed to write)
     ("/ui", ("admin", "risk", "trader", "viewer")), ("/alerts", ("admin", "risk", "trader", "viewer")),
     ("/watchlist", ("admin", "risk", "trader", "viewer")), ("/history/trades", ("admin", "risk", "trader")),
 ]
+# Sign-in and read-only status. Bootstrap is listed so the sign-in page can reach it, but with no
+# operator it still requires the local token (see operator_guard): it must not mint an admin session on its own.
+# Login only accepts an existing operator's PIN. Nothing else here changes operators, permissions, or AI mode.
 PUBLIC = ("/health", "/operators/login", "/operators/bootstrap", "/operators/status", "/operators/logout", "/setup/status", "/ws", "/docs", "/openapi.json")
 
 

@@ -5185,6 +5185,12 @@ def _mcp_caller(headers) -> bool:
     return client == "mcp" or base.startswith(_AI_SOURCE_PREFIXES)
 
 
+def _local_admin(headers) -> bool:
+    """Valid local token, and not an MCP-marked caller. Headers alone never pass."""
+    from qos.local_token import HEADER, matches
+    return not _mcp_caller(headers) and matches(headers.get(HEADER))
+
+
 def _legacy_operator(headers) -> dict:
     """Role when nobody has signed in and no operator is configured.
 
@@ -5193,8 +5199,7 @@ def _legacy_operator(headers) -> dict:
     caller that only sets X-Source or a User-Agent. An MCP marker stays the assistant
     even if that token is also present. With QOS_PUBLIC_TERMINAL=1 this path is not used.
     """
-    from qos.local_token import HEADER, matches
-    if not _mcp_caller(headers) and matches(headers.get(HEADER)):
+    if _local_admin(headers):
         return {"id": "local", "name": "Local user", "role": "admin"}
     return {"id": "local-ai", "name": "Local AI assistant", "role": "assistant"}
 
@@ -5221,6 +5226,13 @@ async def operator_guard(request, call_next):
             op = _legacy_operator(request.headers)
     ops.current.set(op)
     _req_meta.set({"source": request.headers.get("x-source", "terminal")[:40], "request_id": request.headers.get("x-request-id", "")[:64]})
+    # Bootstrap is public so the sign-in page can call it, but it mints an admin session. With no operator yet
+    # that session is only for a caller who already holds the local token, never for an MCP-marked caller.
+    if (request.method not in ("GET", "HEAD", "OPTIONS") and path == "/operators/bootstrap"
+            and not ops.configured() and not ops.public_mode() and not _local_admin(request.headers)):
+        from fastapi.responses import JSONResponse
+        audit("bootstrap_refused", path=path)
+        return JSONResponse({"detail": "local token required to create the first admin"}, status_code=403)
     if path in ops.PUBLIC or path.startswith("/docs"):
         return await call_next(request)
     if op and op["role"] == "assistant" and request.method not in ("GET", "HEAD", "OPTIONS"):
@@ -5269,12 +5281,14 @@ async def operators_status(request: Request):
 
 
 @app.post("/operators/bootstrap")
-async def operators_bootstrap(body: OpCreateBody):
-    """Create the first admin (only allowed while no operator exists)"""
+async def operators_bootstrap(body: OpCreateBody, request: Request):
+    """Create the first admin (only allowed while no operator exists, and only for the local token)"""
     if ops.configured():
         raise HTTPException(409, "operators already configured")
     if ops.public_mode():
         raise HTTPException(403, "public Terminal: create the first admin on the server with `qos operator add <name> --role admin`")
+    if not _local_admin(request.headers):
+        raise HTTPException(403, "local token required to create the first admin")
     op = ops.create(body.name, "admin", body.pin, created_by="bootstrap")
     audit("operator_bootstrap", operator_id=op["id"])
     tok, sess = ops.login(op["id"], body.pin)

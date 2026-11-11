@@ -26,7 +26,11 @@ SWAP_GB="${SWAP_GB:-4}"
 CODE=/srv/qos/engine/bot            # engine code (folder name kept for the systemd units)
 HOME_DIR=/srv/qos/home              # data, configs, strategies, IB Gateway profiles, .env
 step() { echo; echo "== $*"; }
-as_qos() { su - "$U" -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u) PATH=\$HOME/.local/bin:\$PATH QOS_HOME=$HOME_DIR; $*"; }
+as_qos() {  # forward QOS_LOCAL_TOKEN_FILE so later steps chmod the file the engine will actually read
+  local extra=""
+  if [[ -n "${QOS_LOCAL_TOKEN_FILE:-}" ]]; then extra=" QOS_LOCAL_TOKEN_FILE=$(printf '%q' "$QOS_LOCAL_TOKEN_FILE")"; fi
+  su - "$U" -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u) PATH=\$HOME/.local/bin:\$PATH QOS_HOME=$HOME_DIR$extra; $*"
+}
 if [[ -n "$DOMAIN" && -z "${ACME_EMAIL:-}" ]]; then echo "set ACME_EMAIL (certificate notices) together with QOS_TERMINAL_DOMAIN"; exit 1; fi
 
 step "system packages"
@@ -66,7 +70,7 @@ if [[ -d "$CODE/.git" ]]; then as_qos "git -C $CODE pull --ff-only -q"; else as_
 as_qos "git -C $CODE log -1 --format='%h %s'"
 [[ -x /home/$U/.local/bin/uv ]] || as_qos "curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null"
 as_qos "cd $CODE && uv sync --frozen --no-dev -q && uv run --frozen python -c 'import nautilus_trader as n; print(\"python ok · nautilus\", n.__version__)'"
-as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && chmod 600 $HOME_DIR/data/local_token && echo 'QOS_HOME ready: $HOME_DIR'"
+as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && uv run --frozen python -c 'import os; from qos.local_token import ensure_local_token, token_path; ensure_local_token(); os.chmod(token_path(), 0o600)' && echo 'QOS_HOME ready: $HOME_DIR'"
 
 step "Redis (Docker, 127.0.0.1:6379)"
 as_qos "cd $CODE && docker compose up -d redis >/dev/null 2>&1 && sleep 2 && echo \"redis: \$(docker compose exec -T redis redis-cli ping </dev/null)\""

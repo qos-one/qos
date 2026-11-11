@@ -1,9 +1,6 @@
 """QOS_PUBLIC_TERMINAL=1 (Terminal served on a public domain): no legacy no-operator admin, no web bootstrap,
 8-character PINs, a global login-failure limit and an operator token for the live WebSocket."""
-import asyncio
-
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from api import operators as ops
@@ -40,9 +37,13 @@ def test_global_failure_limit_stops_rotating_ids(public):
 
 
 def test_web_bootstrap_refused(public):
-    with pytest.raises(HTTPException) as e:
-        asyncio.run(public.operators_bootstrap(public.OpCreateBody(name="Mallory", pin="12345678")))
-    assert e.value.status_code == 403 and not ops.configured()
+    c = TestClient(public.app)
+    r = c.post("/operators/bootstrap", json={"name": "Mallory", "pin": "12345678"})
+    assert r.status_code == 403 and not ops.configured()
+    from qos.local_token import HEADER, ensure_local_token
+    tok = ensure_local_token()
+    r = c.post("/operators/bootstrap", json={"name": "Mallory", "pin": "12345678"}, headers={HEADER: tok})
+    assert r.status_code == 403 and not ops.configured()
 
 
 def test_no_operator_means_no_access(public, monkeypatch):

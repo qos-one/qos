@@ -228,6 +228,35 @@ def test_mcp_path_is_never_admin_even_with_the_local_token(legacy):
     assert S.load_assistant()["write_enabled"] is False and not st["sent"]
 
 
+def test_bootstrap_requires_the_local_token(legacy):
+    S, c, st = legacy
+    body = {"name": "Ada", "pin": "1234"}
+    assert c.post("/operators/bootstrap", json=body).status_code == 403
+    for headers in (
+        {"X-Source": "terminal"},
+        {"X-Source": "qos-cli"},
+        {"User-Agent": "reqwest/0.12.28"},
+        {"User-Agent": "reqwest/0.12.28", "X-Source": "terminal"},
+    ):
+        assert c.post("/operators/bootstrap", json=body, headers=headers).status_code == 403
+    assert c.post("/operators/bootstrap", json=body, headers={**MCP, **_admin_headers()}).status_code == 403
+    S.save_assistant({"write_enabled": True})   # the refusal is the token check, not the read-only default
+    assert c.post("/operators/bootstrap", json=body, headers={"X-Source": "terminal", "User-Agent": "reqwest/0.12.28"}).status_code == 403
+    assert not ops.configured() and not st["sent"]
+    # other public routes do not mint an admin session or change AI mode / operators
+    assert c.post("/operators/login", json={"id": "ada", "pin": "1234"}).status_code == 401
+    assert c.post("/operators/logout").status_code == 200 and not ops.configured()
+    assert c.put("/assistant", json={"write_enabled": True}).status_code == 403
+    assert c.put("/security/live_code", json={"code": "123456"}).status_code == 403
+    assert c.post("/operators", json={"name": "Eve", "role": "admin", "pin": "1234"}).status_code == 403
+    assert not ops.configured()
+    r = c.post("/operators/bootstrap", json=body, headers=_admin_headers())
+    assert r.status_code == 200 and r.json()["operator"]["role"] == "admin"
+    session = {"X-Operator-Token": r.json()["token"]}
+    assert c.post("/order", json=BUY, headers=session).status_code == 200
+    assert st["sent"] == [("manual", "FX:EURUSD", "BUY", 20000.0)]
+
+
 def test_local_token_does_not_bypass_a_configured_operator(legacy):
     S, c, st = legacy
     ops.create("Ann", "admin", "1234")
