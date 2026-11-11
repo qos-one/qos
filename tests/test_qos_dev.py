@@ -11,6 +11,7 @@ from qos import install as qi
 from qos.cli import new_package
 
 ROOT = Path(__file__).resolve().parent.parent
+SDK_GIT = "git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk"
 CATALOG = Path(os.environ.get("QOS_CATALOG") or ROOT / "data" / "catalog")
 EXAMPLES = Path(os.environ.get("QOS_EXAMPLES") or ROOT.parent / "qos-examples")
 HAS_CATALOG = (CATALOG / "data").exists()
@@ -49,6 +50,8 @@ def test_new_then_install_without_edits(tmp_path, pkgdir, ml):
     name = "my_model" if ml else "my_ema"
     d = new_package(name, ml=ml, parent=tmp_path, log=lambda *_: None)
     assert (d / "strategy.py").exists() and (d / "tests" / "test_strategy.py").exists() and (d / "README.md").exists()
+    spec = "qos-sdk[ml,test]" if ml else "qos-sdk[test]"
+    assert f'pip install "{spec} @ {SDK_GIT}"' in (d / "README.md").read_text()
     if ml:
         assert (d / "features.py").exists() and (d / "model.joblib").exists() and not (d / "__pycache__").exists()
     r = _pytest(d)
@@ -58,6 +61,26 @@ def test_new_then_install_without_edits(tmp_path, pkgdir, ml):
     assert (pkgdir / f"{name}@0.1.0" / "strategy.py").exists()
     if ml:
         assert (pkgdir / f"{name}@0.1.0" / "model.joblib").exists()
+
+
+def test_sdk_install_instructions_use_github_tag():
+    """qos-sdk is not on PyPI, so install lines use the pinned GitHub subdirectory URL"""
+    files = [
+        ROOT / "qos/templates/basic/README.md",
+        ROOT / "qos/templates/ml/README.md",
+        ROOT / "docs/DEVELOPER.md",
+        ROOT / "qos_sdk/README.md",
+        ROOT / "qos/cli.py",
+        ROOT / "qos_cli.py",
+    ]
+    for path in files:
+        text = path.read_text()
+        assert SDK_GIT in text, path
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if "pip install" in line and "qos-sdk" in line:
+                assert "git+" in line, f"{path}:{lineno}: {line.strip()}"
+    root_readme = (ROOT / "README.md").read_text()
+    assert "pip install qos-sdk" not in root_readme
 
 
 def test_new_refuses_bad_names_and_existing(tmp_path):
