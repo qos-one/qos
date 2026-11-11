@@ -678,17 +678,9 @@ def cmd_cloud(a) -> int:
 
 
 def qos_version() -> str:
-    """Version from pyproject.toml of this checkout, else from the installed qos-sdk package"""
-    try:
-        import tomllib
-        return tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())["project"]["version"]
-    except Exception:
-        pass
-    try:
-        from importlib.metadata import version
-        return version("qos-sdk")
-    except Exception:
-        return "unknown"
+    """Version from pyproject.toml of this checkout, else from the installed package"""
+    from qos import __version__
+    return __version__
 
 
 def main(argv=None) -> int:

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
+from qos import __version__ as QOS_VERSION  # noqa: E402  (package version: pyproject.toml or installed metadata)
 from qos import paths  # noqa: E402  (step 17: all file locations come from QOS_HOME)
 from typing import Literal
 
@@ -1681,7 +1682,7 @@ async def lifespan(_: FastAPI):
         ib.disconnect()
 
 
-app = FastAPI(title="QOS API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="QOS API", version=QOS_VERSION, lifespan=lifespan)
 # no CORS: the Terminal calls the API from Rust (no Origin header); browser pages may not write (operator_guard)
 TRUSTED_ORIGINS = {o.strip() for o in os.getenv("QOS_TRUSTED_ORIGINS", "").split(",") if o.strip()}
 
