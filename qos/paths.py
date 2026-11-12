@@ -150,6 +150,11 @@ def init_home(path: str | Path, log=print) -> dict:
         for f in src_cfg.glob("*.json"):
             shutil.copy2(f, h / "configs" / "strategies" / f.name)
         made.append("configs/strategies/*.json (examples)")
+    token_file = h / "data" / "local_token"
+    if not token_file.exists():
+        from qos.local_token import ensure_local_token
+        ensure_local_token(token_file)
+        made.append("data/local_token")
     for d in made:
         log(f"   + {d}")
     return {"home": str(h), "created": made}

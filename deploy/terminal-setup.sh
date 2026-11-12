@@ -29,7 +29,12 @@ if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 80/t
 
 echo "== folders"
 install -d -o qos -g qos /srv/qos/terminal /srv/qos/terminal/releases
+. "$(cd "$(dirname "$0")" && pwd)/envfile.sh"
+write_terminal_host_env /srv/qos/deploy.env /srv/qos/terminal.env "$QOS_TERMINAL_DOMAIN"
+if id qos >/dev/null 2>&1; then
+  chown qos:qos /srv/qos/deploy.env /srv/qos/terminal.env
+  chmod 640 /srv/qos/deploy.env /srv/qos/terminal.env
+fi
 echo
-echo "Next (as qos): add the API settings to /srv/qos/deploy.env, then deploy the Terminal from your computer:"
-echo "  QOS_PUBLIC_TERMINAL=1"
-echo "  QOS_TRUSTED_ORIGINS=https://$QOS_TERMINAL_DOMAIN"
+echo "Wrote QOS_TRUSTED_ORIGINS and QOS_TERMINAL_HOST to /srv/qos/terminal.env (and the origin to /srv/qos/deploy.env)."
+echo "Next: restart qos-api, then qos-terminal, so both pick up the files. deploy/install.sh does that."

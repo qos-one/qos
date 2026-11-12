@@ -54,6 +54,7 @@ class Api:
         self.token = r.json()["token"]
 
     def _h(self, client_id: str = "") -> dict:
+        # Marker headers only. Do not read or forward the on-disk admin credential in the data directory.
         return {"X-Operator-Token": self.token, "X-QOS-Client": "mcp", "X-Source": f"{SOURCE}:{client_id}" if client_id else SOURCE, "X-Request-Id": uuid.uuid4().hex[:16]}
 
     async def call(self, method: str, path: str, retry: bool = True, **kw) -> Any:

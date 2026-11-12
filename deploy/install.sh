@@ -26,7 +26,11 @@ SWAP_GB="${SWAP_GB:-4}"
 CODE=/srv/qos/engine/bot            # engine code (folder name kept for the systemd units)
 HOME_DIR=/srv/qos/home              # data, configs, strategies, IB Gateway profiles, .env
 step() { echo; echo "== $*"; }
-as_qos() { su - "$U" -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u) PATH=\$HOME/.local/bin:\$PATH QOS_HOME=$HOME_DIR; $*"; }
+as_qos() {  # forward QOS_LOCAL_TOKEN_FILE so later steps chmod the file the engine will actually read
+  local extra=""
+  if [[ -n "${QOS_LOCAL_TOKEN_FILE:-}" ]]; then extra=" QOS_LOCAL_TOKEN_FILE=$(printf '%q' "$QOS_LOCAL_TOKEN_FILE")"; fi
+  su - "$U" -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u) PATH=\$HOME/.local/bin:\$PATH QOS_HOME=$HOME_DIR$extra; $*"
+}
 if [[ -n "$DOMAIN" && -z "${ACME_EMAIL:-}" ]]; then echo "set ACME_EMAIL (certificate notices) together with QOS_TERMINAL_DOMAIN"; exit 1; fi
 
 step "system packages"
@@ -66,7 +70,16 @@ if [[ -d "$CODE/.git" ]]; then as_qos "git -C $CODE pull --ff-only -q"; else as_
 as_qos "git -C $CODE log -1 --format='%h %s'"
 [[ -x /home/$U/.local/bin/uv ]] || as_qos "curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null"
 as_qos "cd $CODE && uv sync --frozen --no-dev -q && uv run --frozen python -c 'import nautilus_trader as n; print(\"python ok · nautilus\", n.__version__)'"
-as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && echo 'QOS_HOME ready: $HOME_DIR'"
+as_qos "cd $CODE && uv run --frozen python -m qos.cli home init $HOME_DIR >/dev/null && uv run --frozen python -c 'import os; from qos.local_token import ensure_local_token, token_path; ensure_local_token(); os.chmod(token_path(), 0o600)' && echo 'QOS_HOME ready: $HOME_DIR'"
+# envfile.sh lives in the checkout (this script is sometimes downloaded on its own, before the clone).
+if [[ -f "$CODE/deploy/envfile.sh" ]]; then . "$CODE/deploy/envfile.sh"
+elif [[ -f "$(dirname "$0")/envfile.sh" ]]; then . "$(dirname "$0")/envfile.sh"
+else echo "deploy/envfile.sh missing; update the engine checkout" >&2; exit 1; fi
+own_env() { chown "$U:$U" "$1"; chmod 640 "$1"; }
+if [[ -n "${QOS_LOCAL_TOKEN_FILE:-}" ]]; then
+  persist_local_token_file /srv/qos/deploy.env "$QOS_LOCAL_TOKEN_FILE"
+  own_env /srv/qos/deploy.env
+fi
 
 step "Redis (Docker, 127.0.0.1:6379)"
 as_qos "cd $CODE && docker compose up -d redis >/dev/null 2>&1 && sleep 2 && echo \"redis: \$(docker compose exec -T redis redis-cli ping </dev/null)\""
@@ -84,9 +97,9 @@ if [[ -n "$DOMAIN" ]]; then
   tar xzf "$tmp/qos-terminal-web.tgz" -C "/srv/qos/terminal/releases/$rel" && chown -R "$U:$U" "/srv/qos/terminal/releases/$rel"
   ln -sfn "/srv/qos/terminal/releases/$rel" /srv/qos/terminal/current
   rm -rf "$tmp"
-  for kv in "QOS_PUBLIC_TERMINAL=1" "QOS_TRUSTED_ORIGINS=https://$DOMAIN"; do
-    k=${kv%%=*}; grep -q "^$k=" /srv/qos/deploy.env && sed -i "s#^$k=.*#$kv#" /srv/qos/deploy.env || echo "$kv" >> /srv/qos/deploy.env
-  done
+  write_terminal_host_env /srv/qos/deploy.env /srv/qos/terminal.env "$DOMAIN"
+  own_env /srv/qos/deploy.env
+  own_env /srv/qos/terminal.env
   echo "release $(basename "$url" .tgz) ($TVER) installed"
 else
   echo "skipped (no QOS_TERMINAL_DOMAIN): use the Terminal on your computer through an SSH tunnel, see docs/SELF_HOSTING.md"
@@ -94,9 +107,8 @@ fi
 
 step "services"
 as_qos "mkdir -p ~/.config/systemd/user && cp $CODE/deploy/systemd/*.service $CODE/deploy/systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload"
+# Update order: API, then MCP if it is already running, then the Terminal (after Caddy, below).
 as_qos "systemctl --user enable -q qos-catalog.timer qos-watchdog.timer qos-api.service && systemctl --user restart qos-api.service && systemctl --user start qos-catalog.timer qos-watchdog.timer"
-if [[ -n "$DOMAIN" ]]; then as_qos "systemctl --user enable -q qos-terminal.service && systemctl --user restart qos-terminal.service"; fi
-# qos-mcp is optional (mcp-setup). Restart it when it is already running so an update does not leave the old process up.
 as_qos "if systemctl --user is-active -q qos-mcp.service; then systemctl --user restart qos-mcp.service && echo mcp restarted; fi"
 for _ in $(seq 1 30); do curl -fsS -o /dev/null 127.0.0.1:8000/health 2>/dev/null && break; sleep 2; done
 echo "api: $(curl -fsS 127.0.0.1:8000/health 2>/dev/null | head -c 60 || echo 'not answering yet — journalctl --user -u qos-api (as qos)')"
@@ -113,7 +125,10 @@ ufw status | sed -n '1,12p'
 if [[ -n "$DOMAIN" ]]; then
   step "HTTPS for $DOMAIN (Caddy)"
   QOS_TERMINAL_DOMAIN="$DOMAIN" ACME_EMAIL="$ACME_EMAIL" QOS_ALLOW_IPS="${QOS_ALLOW_IPS:-}" bash "$CODE/deploy/terminal-setup.sh" | grep -v "^Next\|^  QOS_" || true
+  as_qos "systemctl --user enable -q qos-terminal.service"
 fi
+# Last, so it sees terminal.env and deploy.env written above. Also on an update that did not pass a domain.
+as_qos "if systemctl --user is-enabled -q qos-terminal.service; then systemctl --user restart qos-terminal.service && echo terminal restarted; fi"
 
 step "first admin"
 if as_qos "cd $CODE && uv run --frozen python -m qos.cli operator list" | grep -q "no operators"; then

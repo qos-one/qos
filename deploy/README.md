@@ -93,12 +93,19 @@ Adding it to an existing server:
    ```
    ssh -t ENGINE 'cd /srv/qos/engine/bot && QOS_HOME=/srv/qos/home ~/.local/bin/uv run --frozen python -m qos.cli operator add <name> --role admin'
    ```
-3. API settings: add to `/srv/qos/deploy.env`, then restart the API (nodes keep running):
+3. Host settings. Caddy forwards the public Host to the Terminal, which answers only for loopback or a listed host.
+   `deploy/terminal-setup.sh` writes these (install.sh does too). `/srv/qos/deploy.env` is read by the API and the Terminal:
    ```
    QOS_PUBLIC_TERMINAL=1
    QOS_TRUSTED_ORIGINS=https://terminal.<domain>
    ```
-   `ssh ENGINE 'systemctl --user restart qos-api.service'`
+   `/srv/qos/terminal.env` is the Terminal's own file (it overrides deploy.env):
+   ```
+   QOS_TRUSTED_ORIGINS=https://terminal.<domain>
+   QOS_TERMINAL_HOST=terminal.<domain>
+   ```
+   If the installer was given `QOS_LOCAL_TOKEN_FILE`, that path is stored in `deploy.env` as well.
+   Restart in this order (nodes keep running): `qos-api`, then `qos-mcp` if it is running, then `qos-terminal`.
 4. Caddy and firewall, as root, once (`QOS_ALLOW_IPS` is optional: only these addresses may open the Terminal):
    ```
    ssh root@<server-ip> 'cd /srv/qos/engine/bot/deploy && QOS_TERMINAL_DOMAIN=terminal.<domain> ACME_EMAIL=<you@domain> bash terminal-setup.sh'
@@ -122,8 +129,13 @@ Opens the QOS MCP server at `https://<domain>/mcp` so an AI client running elsew
 orders (paper by default, live only if an admin turns it on). The AI signs in as operator `remote_ai` (role
 `assistant`). The API enforces the limits whatever the AI is told: the assistant limits in the Terminal (order size,
 orders per hour, no shorts), the risk gate, and Manual mode for orders. Every order is in the audit log and pops up in
-the Terminal. The AI always runs as a limited assistant, including on a personal machine with no operators
-set up.
+the Terminal. On a personal machine with no operators, a caller is that assistant unless it sends the local
+token (`X-QOS-Local-Token`) from `data/local_token` (mode 0600, created at install and on the API's first start).
+The Terminal and the `qos` CLI read that file; the MCP server is not given it. `X-Source` and `User-Agent` do not grant
+admin. A process running as the same OS user can still read the file: create an operator before connecting an AI that
+has shell access, or run `qos-mcp` as a separate user. Once an operator exists, sign-in is the operator PIN and this
+token is not a substitute. With `QOS_PUBLIC_TERMINAL=1` an operator is required either way. A Terminal that does not
+send the token yet stays read-only until it is updated, or until you create an operator.
 
 You choose what the AI may do in the Terminal, top bar → **AI**:
 
@@ -156,4 +168,4 @@ Closing a position and cancelling an order only reduce exposure, so in Ask first
 
 Stop it: `systemctl --user disable --now qos-mcp` (as qos). New token: delete the `MCP_BEARER_TOKEN` line in
 `/srv/qos/home/.env`, run `mcp-setup.sh` again, update the AI client. Read-only for a while: turn off trading for the
-AI assistant in the Terminal. Updates: run `sudo bash deploy/install.sh` again, or `RESTART=1 deploy/deploy-engine.sh`. Both restart `qos-mcp` when it is running.
+AI assistant in the Terminal. Updates: run `sudo bash deploy/install.sh` again, or `RESTART=1 deploy/deploy-engine.sh`. Both restart `qos-api`, then `qos-mcp` when it is running, then `qos-terminal` when it is running.

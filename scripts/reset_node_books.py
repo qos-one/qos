@@ -26,7 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def api_get(base: str, path: str) -> dict:
-    req = urllib.request.Request(base + path, headers={"X-Operator-Token": os.getenv("QOS_OPERATOR_TOKEN", ""), "X-Source": "reset_node_books"})
+    from qos.local_token import client_headers
+    headers = {"X-Operator-Token": os.getenv("QOS_OPERATOR_TOKEN", ""), "X-Source": "reset_node_books", **client_headers()}
+    req = urllib.request.Request(base + path, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
 
