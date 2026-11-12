@@ -11,7 +11,7 @@ from qos import install as qi
 from qos.cli import new_package
 
 ROOT = Path(__file__).resolve().parent.parent
-SDK_GIT = "git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk"
+SDK_GIT = "git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"
 CATALOG = Path(os.environ.get("QOS_CATALOG") or ROOT / "data" / "catalog")
 EXAMPLES = Path(os.environ.get("QOS_EXAMPLES") or ROOT.parent / "qos-examples")
 HAS_CATALOG = (CATALOG / "data").exists()

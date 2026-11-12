@@ -1,5 +1,5 @@
 """
-qos — the QOS (Quant Operating System) command line · installed with `pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk"`, or scripts/qos on a machine with QOS
+qos — the QOS (Quant Operating System) command line · installed with `pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"`, or scripts/qos on a machine with QOS
 
   qos new <name> [--ml] [--dir .]
   qos install <folder | strategy.py | git url[#subdir]> [--force] [--no-eval] [--bars synthetic]
@@ -20,7 +20,7 @@ qos — the QOS (Quant Operating System) command line · installed with `pip ins
   qos data buy <dataset> [--plan …] · qos billing [status | portal | upgrade pro [--plan month]]
   qos agent price <name> --monthly 19 | --yearly 190 | --once 99 | --remove month · qos payouts [status | onboard]   (developer)
 
-Install as a command:  alias qos="<bot folder>/scripts/qos"   (or pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk")
+Install as a command:  alias qos="<bot folder>/scripts/qos"   (or pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk")
 """
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ def new_package(name: str, ml: bool = False, parent: str | Path = ".", log=print
             import joblib  # noqa: F401
             import sklearn  # noqa: F401
         except ImportError:
-            raise ValueError("the ML template needs scikit-learn and joblib — pip install 'qos-sdk[ml] @ git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk'") from None
+            raise ValueError("the ML template needs scikit-learn and joblib — pip install 'qos-sdk[ml] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk'") from None
         log("→ training the example model on synthetic bars (python train.py --synthetic) …")
         p = subprocess.run([sys.executable, "train.py", "--synthetic"], cwd=dest, capture_output=True, text=True, timeout=300,
                            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
