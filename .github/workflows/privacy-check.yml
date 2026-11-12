@@ -1,0 +1,53 @@
+name: Privacy check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Scan for personal data and Thai text
+        env:
+          QOS_PERSONAL_PATTERN: ${{ secrets.QOS_PERSONAL_PATTERN }}
+          QOS_PUBLIC_CONTACT: ${{ vars.QOS_PUBLIC_CONTACT }}
+        shell: python
+        run: |
+          import os, re, subprocess, sys
+          pattern = os.environ.get("QOS_PERSONAL_PATTERN", "")
+          if not pattern:
+              sys.exit("Secret QOS_PERSONAL_PATTERN is not set (pull requests from forks do not receive it).")
+          personal = re.compile(pattern)
+          contact = os.environ.get("QOS_PUBLIC_CONTACT", "")
+          thai = re.compile("[%s-%s]" % (chr(0x0E00), chr(0x0E7F)))
+          skip_ext = (".png", ".jpg", ".ico", ".icns", ".joblib", ".wasm", ".rgba", ".lock")
+          files = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+          hits = []
+          for path in files:
+              if path.endswith(skip_ext):
+                  continue
+              try:
+                  text = open(path, encoding="utf-8").read()
+              except (UnicodeDecodeError, OSError):
+                  continue
+              doc = path.endswith(".md") or os.path.basename(path) == "NOTICE"
+              for n, line in enumerate(text.splitlines(), 1):
+                  if doc and contact:
+                      line = line.replace(contact, "")
+                  if personal.search(line):
+                      hits.append(f"{path}:{n}: personal value")
+                  if thai.search(line):
+                      hits.append(f"{path}:{n}: Thai text")
+          for h in hits:
+              print(h)
+          if hits:
+              sys.exit(f"{len(hits)} problem(s) found. The matched values are not printed on purpose.")
+          print(f"OK, {len(files)} files scanned.")
