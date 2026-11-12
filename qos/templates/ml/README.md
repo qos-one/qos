@@ -3,7 +3,7 @@
 $label — a QOS ML strategy package (`qos new --ml $name`).
 
 ```
-pip install "qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git@v0.1.5#subdirectory=qos_sdk"
+pip install "qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"
 python train.py --data eurusd_5m.parquet --end 2026-07-01     # or --synthetic
 pytest tests
 qos install .
