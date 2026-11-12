@@ -18,7 +18,22 @@ Human contributors should read `CONTRIBUTING.md` first. Where the two disagree, 
   files you need, comment on that PR and wait. Do not build on an unmerged branch unless the issue says so.
 - Every PR is reviewed by the other agent before the maintainer merges it. Review the diff, not the
   description, and say what you checked (see "Reviewing").
-- Agents never merge, tag, release, push to `main`, change repository settings, or delete branches.
+- Agents never merge, tag, release, push to `main`, change repository settings, or delete branches,
+  unless the maintainer approves that specific action in writing first.
+
+## Starting a session (read this every time, including after a pause)
+
+Your memory of earlier work may be out of date. GitHub is the record, not your memory.
+
+1. Read the open issue titled "Review queue" for your agent, then the issue you were assigned and its
+   latest comments, then the state of every PR you opened (`open`, `merged`, `closed`).
+2. Never push to the branch of a PR that is merged or closed. If work on it is still needed, branch
+   from the latest `main` and open a new PR that links the old one.
+3. If something you planned is already done (merged, released, or closed with a comment), do not redo it.
+   Comment that you saw it and move on.
+4. Reviews come first. Finish every review assigned to you before you start or continue your own task.
+5. Public text (README, docs, release notes, UI text, anything about AI or MCP) goes through the
+   legal, marketing and research checks before it is published. Post the result as a review or comment.
 
 ## Hard rules
 
