@@ -100,6 +100,24 @@ def test_virtual_wrong_after_restart_uses_books(srv, monkeypatch):
     assert row["position"] == 20000.0 and row["origin"] == "cash_balance" and row["ib_virtual_qty"] == -20000.0
 
 
+
+def test_cash_row_cost_comes_from_books_not_virtual_avg(srv, monkeypatch):
+    """IBKR's avgCost belongs to the virtual position (here -20,000 at a meaningless 300): the row rebuilt from cash
+    uses the entry of the open history trade instead"""
+    _fill("FX:USDJPY", "BUY", 40000, 150.0, T0)
+    _fill("FX:USDJPY", "SELL", 20000, 150.0, T0 + timedelta(hours=1))
+    monkeypatch.setattr(srv, "ib", FakeIB([_pos("USDJPY", -20000, 300.0)], [_cash("JPY", -3_000_000)]))
+    row = _rows(srv)["FX:USDJPY"]
+    assert row["origin"] == "cash_balance" and row["avg_cost"] == pytest.approx(150.0)
+
+
+def test_cash_row_without_books_has_no_cost_and_no_pnl(srv, monkeypatch):
+    """No open trade in any book: the cost is unknown, so no unrealized P&L is made up from IBKR's virtual avgCost"""
+    monkeypatch.setattr(srv, "ib", FakeIB([_pos("USDJPY", 5000, 300.0)], [_cash("JPY", -1_500_000)]))
+    row = _rows(srv)["FX:USDJPY"]
+    assert row["origin"] == "cash_balance" and row["position"] == 10000.0
+    assert row["avg_cost"] == 0.0 and row["unrealized_pnl"] == 0.0
+
 def test_cash_not_updated_yet_after_a_close(srv, monkeypatch):
     """IBKR updates CashBalance about every 3 minutes: right after a close the books (0) win over stale cash (+20,000)"""
     _fill("FX:USDJPY", "BUY", 20000, 150.0, T0)
