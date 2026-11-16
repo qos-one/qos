@@ -64,12 +64,21 @@ Check it is up with `curl localhost:8000/health`, then run the
 [Terminal](https://github.com/qos-one/qos-terminal) against it. Without `QOS_HOME`, QOS keeps
 its files next to the code (`data/`, `configs/`, `reports/`).
 
-On first start the engine prints `local token file: <path>`. The Terminal needs to read that file
-to get admin rights on this machine: it looks in `QOS_HOME/data/local_token` or
-`~/trading/data/local_token`, so start it with the same `QOS_HOME`, or set
-`QOS_LOCAL_TOKEN_FILE=<path>`. If the Terminal says "AI assistant is in read-only mode" or "local
-token required to create the first admin" while you are not using an AI, it could not find the
-file. Keep the file private: never paste its contents into an issue or chat.
+On first start the engine prints `local token file: <path>`. The Terminal reads that file to get
+admin rights on this machine, so start the Terminal with the same `QOS_HOME` as the engine. Where
+the file is:
+
+- `QOS_HOME` set: `$QOS_HOME/data/local_token`, for both the engine and the Terminal.
+- `QOS_HOME` not set, engine run from this clone: the engine writes `<this clone>/data/local_token`,
+  but the Terminal does not look there. Set `QOS_HOME` for both, or start the Terminal with
+  `QOS_LOCAL_TOKEN_FILE=<the path the engine printed>`.
+- Otherwise the Terminal falls back to `~/trading/data/local_token`.
+
+`QOS_LOCAL_TOKEN_FILE` overrides the path for both; `QOS_DATA_DIR` moves the whole data folder.
+If the Terminal cannot find the file, the engine answers 403 with "local token required to create
+the first admin" or "AI assistant is in read-only mode", even when you are not using an AI (see
+[AI assistants (MCP)](#ai-assistants-mcp)). Keep the file private: never paste its contents into an
+issue or chat.
 
 ## QOS Cloud
 
@@ -93,18 +102,16 @@ it at `https://mcp.<your-domain>/mcp` for clients such as Grok or ChatGPT — se
 
 Backtests, walk-forward and the Store checks read bars from a local NautilusTrader data
 catalog. Build one from your IBKR account. IB Gateway or TWS must be running in paper mode with
-the API enabled. The script uses the gateway you signed in with in the Terminal:
+the API enabled. Pass the API port of that app. Without `--port`, an exported `IB_PORT` or a
+gateway signed in through the Terminal, the script tries port 4004.
 
 ```bash
-uv run scripts/build_catalog.py                  # FX 1m + 5m, one year back (10–30 minutes)
-uv run scripts/build_catalog.py --update         # add the latest bars
-uv run scripts/build_catalog.py --repair         # re-fetch only missing ranges (e.g. after an IBKR timeout)
+# IB Gateway paper is 4002; TWS paper uses 7497. Signed in through the Terminal? Leave out --port.
+uv run scripts/build_catalog.py --port 4002            # FX 1m + 5m, one year back (10–30 minutes)
+uv run scripts/build_catalog.py --port 4002 --update   # add the latest bars
+uv run scripts/build_catalog.py --port 4002 --repair   # re-fetch only missing ranges (e.g. after an IBKR timeout)
 ```
 
-If you have not signed in through the Terminal and run IB Gateway or TWS yourself, add the API
-port of that app (paper defaults: IB Gateway 4002, TWS 7497), for example
-`uv run scripts/build_catalog.py --port 4002`. Without `--port` and without a gateway signed in
-through the Terminal, the script tries port 4004 (the Terminal's gateway container).
 `export IB_PORT=4002` also works; `IB_PORT` set only in `~/qos/.env` is not read by this script today.
 
 Then backtest the built-in EMA cross strategy:

@@ -31,10 +31,10 @@ Requirements for everyday engine work:
 - Python **3.13** and [uv](https://docs.astral.sh/uv/)
 - Git
 
-Docker, Redis, IB Gateway/TWS and a data catalog are **not** required to install the package or to
-run the default test suite and the broker-free strategy smoke test. You need Redis (the README uses
-`docker compose up -d`) to run the API / Terminal, and an IBKR **paper** session to build a market-data
-catalog.
+Running QOS itself needs an IBKR account (a **paper** account is fine) with IB Gateway or TWS, and
+Redis (the README uses `docker compose up -d`) for the API and Terminal. The default test suite and
+the unit tests of a package made with `qos new` do not need IB Gateway, Docker or a data catalog.
+They are unit tests, not a substitute for installing QOS against your IBKR paper account.
 
 ```bash
 git clone https://github.com/qos-one/qos.git
@@ -49,7 +49,7 @@ this clone with `uv run`. Outside this clone (for example the README that `qos n
 `qos-examples`), install the developer kit from a release tag on GitHub:
 `pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"`.
 
-### Broker-free first strategy (no IBKR, no Docker, no catalog)
+To write a strategy and run its unit tests:
 
 ```bash
 uv run qos new my_ema
@@ -60,8 +60,8 @@ uv run --project . pytest my_ema/tests -q
 `my_ema/` appears in the engine tree and is not gitignored — do not commit it. Use
 `uv run qos new my_ema --dir ~/src` to put it somewhere else.
 
-These tests use generated (synthetic) bars. They show that the strategy runs. They are not a
-market-data backtest.
+These unit tests use generated (synthetic) bars. They show that the code runs. They are not a
+market-data backtest and say nothing about real markets.
 
 A market-data backtest still needs a local NautilusTrader catalog, usually built from your IBKR
 paper account with `scripts/build_catalog.py`. An empty catalog fails with `no bars in catalog`.
