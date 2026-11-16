@@ -1,7 +1,7 @@
 """No operators configured (personal machine): admin is the local token file, not a request header.
 
 A caller with no token, a spoofed X-Source or User-Agent, or an MCP marker is the assistant.
-Read-only default, paper only, assistant limits and Ask first all apply. A valid local token
+Read-only default, paper by default (live only if an admin turns it on), assistant limits and Ask first all apply. A valid local token
 is the local admin, except on the MCP path, which stays the assistant even with that token.
 """
 import pytest
