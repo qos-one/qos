@@ -45,7 +45,8 @@ remote AI access are in [deploy/README.md](deploy/README.md).
 Requirements:
 
 - Linux, Python 3.13 and [uv](https://docs.astral.sh/uv/)
-- Docker, for Redis (`docker-compose.yml`) and, optionally, IB Gateway
+- Docker, for Redis (`docker-compose.yml` runs Redis only; the Terminal creates an IB Gateway
+  container when you sign in there, or you can run IB Gateway / TWS yourself)
 - IB Gateway or TWS with an IBKR paper account
 - The Interactive Brokers API, installed from PyPI by `uv sync`. It has its own license — see
   [NOTICE](NOTICE).
@@ -62,6 +63,22 @@ uv run uvicorn api.server:app --port 8000
 Check it is up with `curl localhost:8000/health`, then run the
 [Terminal](https://github.com/qos-one/qos-terminal) against it. Without `QOS_HOME`, QOS keeps
 its files next to the code (`data/`, `configs/`, `reports/`).
+
+On first start the engine prints `local token file: <path>`. The Terminal reads that file to get
+admin rights on this machine, so start the Terminal with the same `QOS_HOME` as the engine. Where
+the file is:
+
+- `QOS_HOME` set: `$QOS_HOME/data/local_token`, for both the engine and the Terminal.
+- `QOS_HOME` not set, engine run from this clone: the engine writes `<this clone>/data/local_token`,
+  but the Terminal does not look there. Set `QOS_HOME` for both, or start the Terminal with
+  `QOS_LOCAL_TOKEN_FILE=<the path the engine printed>`.
+- Otherwise the Terminal falls back to `~/trading/data/local_token`.
+
+`QOS_LOCAL_TOKEN_FILE` overrides the path for both; `QOS_DATA_DIR` moves the whole data folder.
+If the Terminal cannot find the file, the engine answers 403 with "local token required to create
+the first admin" or "AI assistant is in read-only mode", even when you are not using an AI (see
+[AI assistants (MCP)](#ai-assistants-mcp)). Keep the file private: never paste its contents into an
+issue or chat.
 
 ## QOS Cloud
 
@@ -84,12 +101,18 @@ it at `https://mcp.<your-domain>/mcp` for clients such as Grok or ChatGPT — se
 ## Market data
 
 Backtests, walk-forward and the Store checks read bars from a local NautilusTrader data
-catalog. Build one from your IBKR account (IB Gateway must be running):
+catalog. Build one from your IBKR account. IB Gateway or TWS must be running in paper mode with
+the API enabled. Pass the API port of that app. Without `--port`, an exported `IB_PORT` or a
+gateway signed in through the Terminal, the script tries port 4004.
 
 ```bash
-uv run scripts/build_catalog.py                  # FX 1m + 5m, one year back (10–30 minutes)
-uv run scripts/build_catalog.py --update         # add the latest bars
+# IB Gateway paper is 4002; TWS paper uses 7497. Signed in through the Terminal? Leave out --port.
+uv run scripts/build_catalog.py --port 4002            # FX 1m + 5m, one year back (10–30 minutes)
+uv run scripts/build_catalog.py --port 4002 --update   # add the latest bars
+uv run scripts/build_catalog.py --port 4002 --repair   # re-fetch only missing ranges (e.g. after an IBKR timeout)
 ```
+
+`export IB_PORT=4002` also works; `IB_PORT` set only in `~/qos/.env` is not read by this script today.
 
 Then backtest the built-in EMA cross strategy:
 
@@ -97,6 +120,36 @@ Then backtest the built-in EMA cross strategy:
 uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --days 90
 uv run scripts/walkforward.py configs/strategies/ema_cross_eurusd_5m.json
 ```
+
+## After your first backtest
+
+`scripts/backtest.py` prints a summary and saves the full result to
+`reports/backtests/<strategy>_<time>.json`; open it in the Terminal under **Backtests**.
+A backtest replays past bars; it is not a forecast. It is also a best case on costs: market
+orders fill at the bar's mid close with no spread or slippage, and commission is 0.2 bp per
+fill without IBKR's per-order minimum. Small or frequent trades will cost more on paper and live.
+
+Three next steps on the catalog you just built:
+
+```bash
+# 1. Change one parameter without editing the file
+uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --days 90 --set fast=20
+
+# 2. Fix the period so runs are comparable (--days counts back from now, so it covers
+#    fewer bars if you have not run build_catalog.py --update recently)
+uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --start YYYY-MM-DD --end YYYY-MM-DD
+
+# 3. Test on data the parameters were not tuned on: tune on 90 days, test the next 30, repeat
+uv run scripts/walkforward.py configs/strategies/ema_cross_eurusd_5m.json --days 365 --train 90 --test 30
+```
+
+Walk-forward prints the out-of-sample result next to the untuned baseline and saves it to
+`reports/walkforward/`. The same cost caveat applies.
+
+Did your first backtest run, or did it get stuck? A short
+[issue](https://github.com/qos-one/qos/issues/new) titled "Setup report" (your OS, Python and
+QOS version, and the last step that worked) tells us which steps work on which machines.
+Remove tokens and account numbers first.
 
 ## Write your own strategy
 
