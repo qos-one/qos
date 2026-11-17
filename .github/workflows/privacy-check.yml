@@ -1,0 +1,40 @@
+name: Privacy check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Generic rules: no secrets, runs on every pull request (including forks).
+  # Agents and contributors run the same script before pushing: python3 scripts/privacy_check.py
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generic privacy rules
+        run: python3 scripts/privacy_check.py
+
+  # Private pattern: only after a merge to main, from the "privacy" environment.
+  # Restrict that environment to the main branch, so a workflow run from any other branch cannot read the secret.
+  scan-private:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: privacy
+    steps:
+      - uses: actions/checkout@v5
+      - name: Private privacy pattern
+        env:
+          QOS_PERSONAL_PATTERN: ${{ secrets.QOS_PERSONAL_PATTERN }}
+          QOS_PUBLIC_CONTACT: ${{ vars.QOS_PUBLIC_CONTACT }}
+        run: |
+          if [ -z "$QOS_PERSONAL_PATTERN" ]; then
+            echo "::error::Secret QOS_PERSONAL_PATTERN is not set in the 'privacy' environment."
+            exit 1
+          fi
+          python3 scripts/privacy_check.py
