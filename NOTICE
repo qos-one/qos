@@ -16,17 +16,23 @@ This repository contains code under two licenses:
     - qos_sdk/          (the standalone SDK package)
     - qos/paths.py      (folder locations used by the developer kit)
 
-Additional permissions (AGPL-3.0 section 7) — DRAFT, for legal review
+Additional permissions (AGPL-3.0 section 7)
 -------------------------------------------------------------------
 As copyright holder of the AGPL-3.0-only parts of this repository, Dr. Seksin Cheevirot grants
-the following additional permissions. They apply to everyone who receives this software, and
-you may remove them from your own modified versions.
+the QOS Agent Exception below. It applies to everyone who receives this software, and you may
+remove it from your own modified versions.
 
 1. QOS Agent Exception. A strategy, agent or model (an "Agent") that interacts with QOS only
    through the developer kit (qos/sdk/, qos_sdk/) or the documented plugin interfaces is not
    required to be licensed under AGPL-3.0 because QOS loads and runs it in the same process.
    You may license and distribute such an Agent, in source or compiled form, under terms of
-   your choice. This exception does not cover changes to QOS itself.
+   your choice, including proprietary licenses. This exception does not cover changes to QOS
+   itself.
+
+Broker API Exception — DRAFT, for legal review
+-------------------------------------------------------------------
+The following paragraph is a draft only. It is not a granted additional permission under
+AGPL-3.0 section 7.
 
 2. Broker API Exception. You may combine QOS with the Interactive Brokers API (ibapi, including
    the nautilus_ibapi package) and convey the combination, even though that API is not under a
