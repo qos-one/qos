@@ -3,7 +3,7 @@
 > **DRAFT — for legal review.** Replace the bracketed placeholders before publishing.
 
 QOS is open source, but its name and logo are not. This policy explains how you may use the
-**QOS** and **qos.one** names and the **QOS logo** (the "Marks"), owned by **Seksin Cheevirot**
+**QOS** and **qos.one** names and the **QOS logo** (the "Marks"), owned by **Dr. Seksin Cheevirot**
 ("we"). The code licenses (AGPL-3.0 and Apache-2.0) cover copyright only; they do not grant any
 trademark rights.
 
