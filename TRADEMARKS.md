@@ -1,10 +1,10 @@
 # QOS Trademark Policy
 
-> **DRAFT — for legal review.** Replace the bracketed placeholders before publishing.
+Last updated: 16 November 2026
 
 QOS is open source, but its name and logo are not. This policy explains how you may use the
-**QOS** and **qos.one** names and the **QOS logo** (the "Marks"), owned by **Dr. Seksin Cheevirot**
-("we"). The code licenses (AGPL-3.0 and Apache-2.0) cover copyright only; they do not grant any
+**QOS** and **qos.one** names and the **QOS logo** (the "Marks"), owned by **Dr. Seksin Cheevirot**,
+an individual ("we"). The code licenses (AGPL-3.0 and Apache-2.0) cover copyright only; they do not grant any
 trademark rights.
 
 The goal is simple: anyone should be able to tell whether something comes from the official QOS
@@ -30,9 +30,12 @@ project and qos.one, or from someone else.
   way that suggests it is run or approved by qos.one.
 - **Use the Marks in company, product, domain or social-media names**, such as "QOS Pro",
   "qosmarket.com" or "@QOSsignals".
-- **Imply endorsement, partnership or certification** ("official", "certified", "verified by
-  QOS") unless we have agreed to it in writing. Only agents listed on qos.one may say they are
-  verified by qos.one.
+- **Imply endorsement, partnership, certification or verification**
+  ("official", "certified", "verified", "verified by QOS" or
+  "verified by qos.one") unless we have agreed to that wording in
+  writing. Being listed on qos.one means only that the agent is
+  listed there. It is not an endorsement, not a performance review
+  and not investment advice.
 - **Alter the logo** (colours, proportions, combining it with other marks) or use confusingly
   similar names or logos.
 - **Use the Marks in connection with financial promotions**, return promises or investment

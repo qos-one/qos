@@ -139,9 +139,10 @@ Contributions are accepted under the license of the files they change:
 - **Apache-2.0** for the developer kit: `qos/sdk/`, `qos/templates/`, `qos_sdk/` and `qos/paths.py`
   (see `NOTICE`)
 
-`NOTICE` also describes additional permissions under AGPL-3.0 section 7 (including a QOS Agent
-Exception). Those paragraphs are still marked **DRAFT, for legal review**. Do not treat them as
-final, and do not tell users they already apply, until `NOTICE` no longer says DRAFT.
+`NOTICE` also describes additional permissions under AGPL-3.0 section 7. The QOS Agent
+Exception is granted. The Broker API Exception is still marked **DRAFT, for legal review**.
+Do not treat it as final, and do not tell users it already applies, until `NOTICE` no longer
+marks it DRAFT.
 
 The maintainers may later ask contributors to sign a Contributor License Agreement for larger
 changes; until then, no rights beyond these licenses are requested.
