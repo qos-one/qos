@@ -1,6 +1,7 @@
 # Remote AI access to the QOS MCP server (written to /etc/caddy/sites/mcp.caddy by deploy/mcp-setup.sh).
 # No IP allowlist here: AI providers call from their own servers. Every request needs the bearer token, which the MCP
-# server checks; the AI then acts as an operator with role "assistant" (paper only unless an admin enables live).
+# server checks; the AI then acts as an operator with role "assistant": it can place orders (paper by default,
+# live only if an admin turns it on), and only when an admin has turned on trading for the assistant.
 __DOMAIN__ {
 	encode zstd gzip
 	header {
