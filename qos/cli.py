@@ -148,7 +148,7 @@ def new_package(name: str, ml: bool = False, parent: str | Path = ".", log=print
     log(f"→ created {dest}")
     for f in sorted(x for x in dest.rglob("*") if x.is_file()):
         log(f"   {f.relative_to(dest)}")
-    log(f"next: cd {dest} && pytest tests && qos install .")
+    log(f"next: cd {dest} && uv run pytest tests && uv run qos install .")
     return dest
 
 

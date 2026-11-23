@@ -143,3 +143,28 @@ def test_examples_pass_backtest_criteria_on_fixed_window(name, inst):
     cls = _load(EXAMPLES / name / "strategy.py")
     r = quick_backtest(cls, None, catalog.bars(inst, "15m", "2026-07-29", "2026-10-27", source=CATALOG))
     assert r["pnl_usd"] > 0 and r["max_drawdown_usd"] <= 10_000, (r["pnl_usd"], r["max_drawdown_usd"])
+
+
+def _first_backtest(folder: Path, *args):
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"}
+    return subprocess.run([sys.executable, "first_backtest.py", *args], cwd=folder, capture_output=True, text=True, env=env, timeout=300)
+
+
+def test_template_first_backtest_labels_its_numbers(tmp_path):
+    """first_backtest.py: no P&L on synthetic bars; on the user's own CSV the P&L is labelled as a backtest, not a forecast"""
+    from qos.sdk import catalog
+    from qos.sdk.testing import synthetic_bars
+    logged = []
+    d = new_package("fb_demo", parent=tmp_path, log=logged.append)
+    assert logged[-1].endswith("uv run pytest tests && uv run qos install .")   # pytest and qos are not on PATH after uv sync
+    r = _first_backtest(d)
+    assert r.returncode == 0, r.stdout[-800:] + r.stderr[-800:]
+    assert "Install OK" in r.stdout and "SYNTHETIC bars (install check only)" in r.stdout
+    assert "P&L" not in r.stdout and "USD" not in r.stdout
+    df = catalog.bars_to_frame(synthetic_bars("EUR/USD.IDEALPRO", 5, n=600))[["open", "high", "low", "close"]]
+    df.index.name = "time"
+    df.to_csv(d / "my_bars.csv")
+    r = _first_backtest(d, "my_bars.csv")
+    assert r.returncode == 0, r.stdout[-800:] + r.stderr[-800:]
+    assert "my_bars.csv: 600 bars" in r.stdout and "(backtest, best-case costs; not a forecast)" in r.stdout
+    assert "Install OK" not in r.stdout
