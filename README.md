@@ -23,7 +23,7 @@ and the Python developer kit (SDK). The Terminal is in
 | `qos/sdk/`, `qos/templates/`, `qos_sdk/` | Developer kit for writing your own strategies | Apache-2.0 |
 | `scripts/` | Backtest, walk-forward, data catalog and maintenance tools | AGPL-3.0-only |
 | `deploy/` | Server installer, systemd services, Caddy sites, operations guide | AGPL-3.0-only |
-| `mcp_server.py` | MCP server (optional, experimental): AI assistants read the account and place orders (paper by default) within your limits | AGPL-3.0-only |
+| `mcp_server.py` | MCP server (optional, experimental): AI assistants read the account and, if an admin turns on trading for the assistant, place orders (paper by default, live only if an admin turns it on) within your limits | AGPL-3.0-only |
 
 ## Install on a server (recommended)
 
