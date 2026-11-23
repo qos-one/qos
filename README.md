@@ -144,7 +144,11 @@ uv run scripts/walkforward.py configs/strategies/ema_cross_eurusd_5m.json --days
 ```
 
 Walk-forward prints the out-of-sample result next to the untuned baseline and saves it to
-`reports/walkforward/`. The same cost caveat applies.
+`reports/walkforward/`. The same cost caveat applies. Read it with three limits in mind: each
+test window starts with fresh indicators and closes any open position at its end; a fold where
+no setting reached the minimum number of trades uses the first grid setting (its line still says
+"best"); and the "most picked" setting is chosen after seeing every fold, so the out-of-sample
+figure is not a result for that setting.
 
 Did your first backtest run, or did it get stuck? A short
 [Setup report](https://github.com/qos-one/qos/issues/new?template=1_setup_report.yml) (your OS, Python and QOS version, and the last step that worked)
