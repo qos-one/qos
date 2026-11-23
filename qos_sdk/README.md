@@ -2,6 +2,8 @@
 
 Write a trading strategy in one Python file, test it on your machine with the same Nautilus backtest engine QOS uses, and install it into QOS.
 
+Needs Python 3.12, 3.13 or 3.14. QOS pins nautilus-trader 1.230.0, which has no build for Python 3.15 yet, so on 3.15 pip stops with "No matching distribution found for nautilus-trader==1.230.0". Make the environment with a supported Python first, for example `uv venv -p 3.13 --seed && source .venv/bin/activate` or `python3.13 -m venv .venv`.
+
 ```
 pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"
 qos new my_strategy            # or: qos new --ml my_model
