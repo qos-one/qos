@@ -1,0 +1,129 @@
+name: Bug report
+description: Something does not work as documented
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please **redact** account numbers, API keys, tokens, passwords, PINs, bearer tokens, cookies, `.env` files and P/L figures from logs and screenshots before posting. Do not attach a full `.env`. Never paste the bearer token or the contents of `data/local_token`. If you already posted a secret, edit it out of the issue and rotate it. Do not send a full `.env` in a follow-up.
+
+        If this could place, size or cancel an order unexpectedly, or bypass a risk check, **stop** and report privately as described in [SECURITY.md](https://github.com/qos-one/qos/blob/main/SECURITY.md), or via the repository Security tab — not as a public issue.
+
+        QOS is trading software, not investment advice. This form is for technical bugs only.
+  - type: input
+    id: version
+    attributes:
+      label: QOS version or commit
+      description: "`uv run qos --version` and/or `git rev-parse --short HEAD`."
+      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Install path
+      options:
+        - "Server script (deploy/install.sh)"
+        - "Development setup (uv sync)"
+        - "SDK only"
+        - "Other"
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - "Install / deploy"
+        - "Engine / API"
+        - "Backtest / walk-forward"
+        - "Data catalog"
+        - "Strategy SDK / qos CLI"
+        - "IBKR paper"
+        - "IBKR live"
+        - "Web Terminal"
+        - "Desktop Terminal (dev build)"
+        - "MCP / AI assistant"
+        - "Other component"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - "Synthetic test (no broker)"
+        - "Market-data backtest"
+        - "Paper"
+        - "Live"
+        - "Terminal UI"
+        - "SDK / CLI only"
+        - "Self-hosting / deploy"
+    validations:
+      required: true
+  - type: dropdown
+    id: mcp_mode
+    attributes:
+      label: AI / MCP mode (if relevant)
+      description: "Leave as “Not using MCP / AI” if this is not about a connected AI. In the Terminal, top bar → AI. Never paste the bearer token. Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice."
+      options:
+        - "Not using MCP / AI"
+        - "Read-only"
+        - "Ask first"
+        - "Auto"
+  - type: dropdown
+    id: terminal_kind
+    attributes:
+      label: Terminal (if relevant)
+      description: Leave as “Not using the Terminal” if this bug is not about the Terminal.
+      options:
+        - "Not using the Terminal"
+        - "Web Terminal"
+        - "Desktop Terminal (dev build)"
+  - type: input
+    id: env
+    attributes:
+      label: OS, Python, uv
+      description: "e.g. Ubuntu 24.04 x86_64, Python 3.13.5, uv 0.13.7."
+      placeholder: "Ubuntu 24.04 x86_64 / Python 3.13 / uv 0.13.x"
+    validations:
+      required: true
+  - type: input
+    id: ib
+    attributes:
+      label: IB Gateway / TWS and port (if relevant)
+      description: "Leave blank if this bug has no broker. IB Gateway paper is 4002, TWS paper is 7497; 4004 is what build_catalog.py tries when no port is set and no Terminal gateway is signed in."
+      placeholder: "e.g. IB Gateway paper, port 4002"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps from a clean clone if you can. Include the exact command.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or full error (redacted)
+      description: Paste the traceback or the last ~40 lines. Redact tokens, account ids and P/L first. Never paste the bearer token.
+      render: text
+  - type: checkboxes
+    id: not_vuln
+    attributes:
+      label: This is not a security report
+      options:
+        - label: "This public issue is not a vulnerability or risk-check bypass report"
+          required: true
+  - type: checkboxes
+    id: risk
+    attributes:
+      label: Order safety
+      options:
+        - label: "This could place, size or cancel an order unexpectedly, or bypass a risk check (if so, stop and report privately as described in [SECURITY.md](https://github.com/qos-one/qos/blob/main/SECURITY.md), or via the Security tab, and do not paste exploit details here)"

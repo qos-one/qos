@@ -1,0 +1,44 @@
+name: Feature or broker/data request
+description: Suggest a broker, data source, or feature
+title: "[feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please **redact** account numbers, API keys, tokens, passwords, PINs, bearer tokens, cookies and `.env` files. Do not attach a full `.env`. Never paste the bearer token or the contents of `data/local_token`. If you already posted a secret, edit it out of the issue and rotate it.
+
+        Please search existing issues first and add a thumbs-up to a duplicate instead of opening a new one. Reactions help us order the list.
+
+        QOS is trading software, not investment advice. Do not attach return claims, equity curves or P/L figures.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - "New broker"
+        - "New data source"
+        - "Research / backtest workflow"
+        - "Risk control"
+        - "Web Terminal"
+        - "Docs / onboarding"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What problem does this solve for you?"
+      description: A concrete workflow, not a marketing wish-list.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution (optional)
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to help build this

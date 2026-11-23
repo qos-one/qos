@@ -12,11 +12,11 @@ only — please do not ask for, and do not expect, buy/sell or position-sizing a
 
 ## Ways to help
 
-- **Tell us how far you got** — an [issue](https://github.com/qos-one/qos/issues/new) titled
-  "Setup report" (it worked or you got stuck) is the most useful first-run signal we have.
+- **Tell us how far you got** — a [Setup report](https://github.com/qos-one/qos/issues/new?template=1_setup_report.yml)
+  (it worked or you got stuck) is the most useful first-run signal we have.
   Say your OS, Python version, QOS version and the last step that worked. Please redact
   tokens, account numbers and P/L first.
-- **Report a bug** — open an issue with what you did, what you expected, what happened, your OS,
+- **Report a bug** — open a [bug report](https://github.com/qos-one/qos/issues/new?template=bug_report.yml) with what you did, what you expected, what happened, your OS,
   Python version and the QOS version (`uv run qos --version` or the git commit). Redact credentials.
 - **Fix a bug or improve docs** — small pull requests are reviewed fastest.
 - **Propose a feature** — open an issue first so we can agree on the design before you write code.

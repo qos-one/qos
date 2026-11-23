@@ -147,8 +147,8 @@ Walk-forward prints the out-of-sample result next to the untuned baseline and sa
 `reports/walkforward/`. The same cost caveat applies.
 
 Did your first backtest run, or did it get stuck? A short
-[issue](https://github.com/qos-one/qos/issues/new) titled "Setup report" (your OS, Python and
-QOS version, and the last step that worked) tells us which steps work on which machines.
+[Setup report](https://github.com/qos-one/qos/issues/new?template=1_setup_report.yml) (your OS, Python and QOS version, and the last step that worked)
+tells us which steps work on which machines.
 Remove tokens and account numbers first.
 
 ## Write your own strategy
