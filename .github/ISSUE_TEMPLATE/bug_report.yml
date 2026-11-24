@@ -16,7 +16,7 @@ body:
     attributes:
       label: QOS version or commit
       description: "`uv run qos --version` and/or `git rev-parse --short HEAD`."
-      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+      placeholder: "e.g. qos 0.1.7 / 9dd5a13"
     validations:
       required: true
   - type: dropdown

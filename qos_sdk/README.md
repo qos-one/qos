@@ -5,7 +5,7 @@ Write a trading strategy in one Python file, test it on your machine with the sa
 Needs Python 3.12, 3.13 or 3.14. QOS pins nautilus-trader 1.230.0, which has no build for Python 3.15 yet, so on 3.15 pip stops with "No matching distribution found for nautilus-trader==1.230.0". Make the environment with a supported Python first, for example `uv venv -p 3.13 --seed && source .venv/bin/activate` or `python3.13 -m venv .venv`.
 
 ```
-pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"
+pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.7#subdirectory=qos_sdk"
 qos new my_strategy            # or: qos new --ml my_model
 cd my_strategy && pytest tests
 qos install .
@@ -19,7 +19,7 @@ bars = catalog.bars("EUR/USD", "5m", "2026-01-01", "2026-06-30", source="eurusd_
 print(quick_backtest(MyStrategy, {"fast": 12}, bars)["pnl_usd"])
 ```
 
-Not on PyPI. Install from GitHub as above, pinned to release v0.1.6. For the ML template and pytest, use `"qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"`. Full guide: `docs/DEVELOPER.md` in QOS.
+Not on PyPI. Install from GitHub as above, pinned to release v0.1.7. For the ML template and pytest, use `"qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git@v0.1.7#subdirectory=qos_sdk"`. Full guide: `docs/DEVELOPER.md` in QOS.
 
 ## License
 

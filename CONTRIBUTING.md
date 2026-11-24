@@ -40,14 +40,14 @@ They are unit tests, not a substitute for installing QOS against your IBKR paper
 git clone https://github.com/qos-one/qos.git
 cd qos
 uv sync
-uv run qos --version          # e.g. qos 0.1.6
+uv run qos --version          # e.g. qos 0.1.7
 uv run pytest -q              # engine tests; some tests skip without a catalog or IB Gateway
 ```
 
 `qos-sdk` is **not on PyPI** yet. `pip install qos-sdk` does not work. To work on the engine, use
 this clone with `uv run`. Outside this clone (for example the README that `qos new` generates, or
 `qos-examples`), install the developer kit from a release tag on GitHub:
-`pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"`.
+`pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.7#subdirectory=qos_sdk"`.
 
 To write a strategy and run its unit tests:
 
