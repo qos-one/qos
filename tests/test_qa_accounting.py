@@ -109,7 +109,12 @@ def test_adjust_book_price_null_param_and_unique_ids(h, monkeypatch):
     assert trades(h, key="STK:MSFT")[0]["entry_price"] == 400.0
 
 
-def test_adjustment_excluded_from_average_cost(h):
+def test_adjustment_excluded_from_average_cost(h, monkeypatch):
+    class FDT(datetime):                                             # adjust_book stamps "now": pin it between the buy and the
+        @classmethod                                                 # sell, or the test depends on the day it runs
+        def now(cls, tz=None):
+            return T0 + timedelta(days=1)
+    monkeypatch.setattr(h, "datetime", FDT)
     h.upsert_fills([F(1, "BUY", 10, 100.0, 0, key="STK:X")])
     h.adjust_book("DU1", "STK:X", 20, price=50.0)                    # +10 at a different price must not move the cost
     h.upsert_fills([F(3, "SELL", 20, 110.0, 60 * 24 * 30, key="STK:X")])
