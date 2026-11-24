@@ -100,9 +100,9 @@ def frame_to_bars(df: pd.DataFrame, instrument: str, tf) -> list:
     from nautilus_trader.persistence.wranglers import BarDataWrangler
     from qx_strategies import bar_type_str
     iid = instrument_id(instrument)
-    df = df[["open", "high", "low", "close"] + (["volume"] if "volume" in df else [])].astype(float).copy()
-    if "volume" not in df:
-        df["volume"] = 1_000_000.0
+    vol = df["volume"].astype(float).to_numpy(copy=True) if "volume" in df else 1_000_000.0
+    df = df[["open", "high", "low", "close"]].astype(float).copy()
+    df["volume"] = vol                     # set as a new column: pandas 3 (copy-on-write) hands Nautilus read-only arrays otherwise
     df.index.name = "timestamp"
     sym = iid.split(".")[0].replace("/", "")
     return BarDataWrangler(BarType.from_str(bar_type_str(iid, tf_minutes(tf), "EXTERNAL")), make_fx_instrument(sym)).process(df)

@@ -6,6 +6,8 @@
 
 ## 1. The whole flow
 
+Needs Python 3.12, 3.13 or 3.14. QOS pins nautilus-trader 1.230.0, which has no build for Python 3.15 yet, so on 3.15 pip stops with "No matching distribution found for nautilus-trader==1.230.0". Make the environment with a supported Python first, for example `uv venv -p 3.13 --seed && source .venv/bin/activate` or `python3.13 -m venv .venv`.
+
 ```
 pip install "qos-sdk @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"   ← no QOS needed
 qos new my_strategy                  ← or qos new --ml my_model
@@ -37,7 +39,7 @@ The SDK is not on PyPI. Install it from GitHub, pinned to release v0.1.6, as abo
 Add `[ml]` for the ML template and `[test]` for pytest:
 `"qos-sdk[ml,test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"`.
 
-Python ≥ 3.12. qos-sdk installs NautilusTrader 1.230 (the same version QOS uses), so a local backtest gives the same result as QOS on the same bars
+Python 3.12, 3.13 or 3.14 (`>=3.12,<3.15`). qos-sdk installs NautilusTrader 1.230 (the same version QOS uses), so a local backtest gives the same result as QOS on the same bars
 (proven by the test `test_quick_backtest_equals_qos_backtest`).
 
 On a machine that already runs QOS there is no need to install it: run `uv run qos` in the QOS folder.
