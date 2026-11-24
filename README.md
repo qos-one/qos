@@ -25,6 +25,25 @@ and the Python developer kit (SDK). The Terminal is in
 | `deploy/` | Server installer, systemd services, Caddy sites, operations guide | AGPL-3.0-only |
 | `mcp_server.py` | MCP server (optional, experimental): AI assistants read the account and, if an admin turns on trading for the assistant, place orders (paper by default, live only if an admin turns it on) within your limits | AGPL-3.0-only |
 
+## Try it without a broker
+
+No IBKR account, IB Gateway, Docker or data catalog needed. You need Linux or macOS and
+[uv](https://docs.astral.sh/uv/) (`uv sync` downloads Python 3.13 if you don't have it). From a
+clone of this repository:
+
+```bash
+uv sync
+uv run qos new my_strategy                     # scaffold the example strategy
+cd my_strategy && uv run pytest tests -q       # 4 tests, including engine backtests on generated bars
+uv run qos install .                           # the install checks; also runs on generated bars
+```
+
+Use `uv run` in front of `pytest` and `qos`: they are not on your PATH after `uv sync`.
+Without a data catalog, every number these commands print (including P&L) comes from
+**generated bars, not market prices**. It shows the code path works, nothing about how a
+strategy would do. For a backtest on real bars, build a catalog from your IBKR paper account
+([Market data](#market-data)).
+
 ## Install on a server (recommended)
 
 One script installs the engine, Redis, IB Gateway and the web Terminal on an Ubuntu 24.04+
