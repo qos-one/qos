@@ -27,7 +27,7 @@ and the Python developer kit (SDK). The Terminal is in
 
 ## Try it without a broker
 
-No IBKR account, IB Gateway, Docker or data catalog needed. You need Linux and
+No IBKR account, IB Gateway, Docker or data catalog needed. You need Linux or macOS and
 [uv](https://docs.astral.sh/uv/) (`uv sync` downloads Python 3.13 if you don't have it). From a
 clone of this repository:
 
