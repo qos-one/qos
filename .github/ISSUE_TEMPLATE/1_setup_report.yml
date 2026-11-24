@@ -82,8 +82,8 @@ body:
     id: version
     attributes:
       label: QOS version or commit
-      description: "`uv run qos --version` (e.g. qos 0.1.6) and/or `git rev-parse --short HEAD`."
-      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+      description: "`uv run qos --version` (e.g. qos 0.1.7) and/or `git rev-parse --short HEAD`."
+      placeholder: "e.g. qos 0.1.7 / 9dd5a13"
     validations:
       required: true
   - type: input

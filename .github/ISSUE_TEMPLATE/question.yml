@@ -17,7 +17,7 @@ body:
     id: version
     attributes:
       label: QOS version or commit
-      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+      placeholder: "e.g. qos 0.1.7 / 9dd5a13"
     validations:
       required: true
   - type: textarea

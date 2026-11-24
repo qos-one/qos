@@ -3,7 +3,7 @@
 $label — a QOS strategy package (`qos new $name`).
 
 ```
-pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.6#subdirectory=qos_sdk"
+pip install "qos-sdk[test] @ git+https://github.com/qos-one/qos.git@v0.1.7#subdirectory=qos_sdk"
 python first_backtest.py   # first backtest, no broker account needed (synthetic bars: checks your install)
 pytest tests
 qos install .
