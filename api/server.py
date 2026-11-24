@@ -2258,6 +2258,20 @@ def _position_row(key: str, mkt: str, sym: str, sec_type: str, ccy: str | None, 
             "decimals": decimals_for(mkt, sym) if mkt in MARKET_BY_ID else 2}
 
 
+def _cash_row_cost(acct: str, key: str) -> float:
+    """Average cost of a position rebuilt from cash balances. IBKR's avgCost belongs to its virtual CASH position, which
+    counts a different quantity (it resets on every gateway restart), so it is never used here: the open trade of the
+    shared manual/agent book first, then the quantity-weighted entry of all open trades (nodes included), else 0 (unknown)."""
+    for lookup in (history.open_cost, history.open_entry_price):
+        try:
+            v = lookup(acct, key)
+        except Exception:
+            v = None
+        if v:
+            return v
+    return 0.0
+
+
 @app.get("/positions")
 async def positions():
     """Positions from the ib_async subscription (reqPositions on connect + updates via positionEvent)
@@ -2303,16 +2317,13 @@ async def positions():
                 e = cash_map.get(key) or {}
                 if qty == 0 or _fx_residue(key, e.get("cash", 0.0), acct):
                     continue
-                try:
-                    avg = history.open_cost(acct, key) or avg       # open trade of the shared manual/agent book
-                except Exception:
-                    pass
+                avg = _cash_row_cost(acct, key)
             if item is not None:
                 mp, mv, upnl, rpnl = _f(item.marketPrice), _f(item.marketValue), _f(item.unrealizedPNL), _f(item.realizedPNL)
             else:
                 mp = _mark(_tickers.get(key))
                 mv = qty * mp
-                upnl = (mp - avg) * qty if mp else 0.0
+                upnl = (mp - avg) * qty if mp and (avg or not from_cash) else 0.0     # unknown cost: no P&L
                 rpnl = 0.0
             row = _position_row(key, mkt, sym, p.contract.secType, p.contract.currency, qty, avg, mp, mv, upnl, rpnl, rates)
             if from_cash:
@@ -2343,11 +2354,7 @@ async def positions():
             if e["qty"] == 0:
                 continue
             qty, mp = e["qty"], _mark(_tickers.get(key))
-            avg = 0.0
-            try:
-                avg = history.open_cost(acct, key) or 0.0
-            except Exception:
-                pass
+            avg = _cash_row_cost(acct, key)
             row = _position_row(key, "FX", sym, "CASH", fx.split_pair(sym)[1], qty, avg, mp, qty * mp,
                                 (mp - avg) * qty if mp and avg else 0.0, 0.0, rates)
             row["origin"] = "cash_balance"
