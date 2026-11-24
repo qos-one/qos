@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability or a way to bypass a risk check
+    url: https://github.com/qos-one/qos/security/advisories/new
+    about: Report privately as described in SECURITY.md, or via the repository Security tab — not as a public issue.

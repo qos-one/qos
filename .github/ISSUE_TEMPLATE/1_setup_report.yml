@@ -1,0 +1,165 @@
+name: Setup report (it worked / I got stuck)
+description: Tell us how far you got with QOS. About two minutes. It shows us where the first-run path breaks.
+title: "[setup] "
+labels: ["setup-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying QOS. "It worked" reports are as useful as "I got stuck" ones.
+
+        **Please redact before you paste or attach anything:** account numbers, API keys, tokens, passwords, PINs, bearer tokens, cookies, `.env` files, and P/L or other money figures. Do not send a full `.env`. Never paste the bearer token or the contents of `data/local_token`. A redacted command and the last lines of the error are enough. If you already posted a secret, edit it out of the issue and rotate it. Do not send a full `.env` in a follow-up.
+
+        Security problems (including anything that could place, size or cancel an order unexpectedly, or bypass a risk check): report privately as described in [SECURITY.md](https://github.com/qos-one/qos/blob/main/SECURITY.md), or via the repository Security tab — not here.
+
+        QOS is trading software, not investment advice. This form is for technical setup only.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Result
+      options:
+        - "It worked: I ran my first market-data backtest (scripts/backtest.py)"
+        - "It worked: template or example tests passed on synthetic bars (no catalog)"
+        - "Partly: QOS runs, but no backtest yet"
+        - "Stuck: I could not get QOS running"
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Install path
+      options:
+        - "Server script (deploy/install.sh, Ubuntu 24.04+)"
+        - "Development setup (uv sync; Docker / uvicorn only if you started the API)"
+        - "SDK only (writing a strategy, no engine)"
+        - "Other"
+    validations:
+      required: true
+  - type: dropdown
+    id: furthest
+    attributes:
+      label: Furthest step you reached
+      description: Official README steps are in order. The synthetic (no-broker) step is listed too, so we do not count a template test as a market-data backtest.
+      options:
+        - "Read the README only"
+        - "Install finished (install.sh, or uv sync)"
+        - "qos home init done"
+        - "qos new / template or example tests passed on synthetic bars (no IBKR, no catalog)"
+        - "Engine up (curl localhost:8000/health is OK)"
+        - "Web Terminal opened against my engine"
+        - "Created the first admin in the Terminal (local token found)"
+        - "Desktop Terminal (dev build) opened against my engine"
+        - "IB Gateway or TWS connected (paper)"
+        - "build_catalog.py finished (catalog has bars)"
+        - "First market-data backtest finished (scripts/backtest.py)"
+        - "Walk-forward finished (scripts/walkforward.py)"
+        - "Wrote or installed my own strategy (qos install)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Include the distro/version and CPU architecture if you know it.
+      placeholder: "e.g. Ubuntu 24.04 x86_64"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "Output of `python3 --version` or `uv run python --version`."
+      placeholder: "e.g. Python 3.13.5"
+    validations:
+      required: true
+  - type: input
+    id: uv
+    attributes:
+      label: uv version (optional)
+      description: "Output of `uv --version`. Leave blank if you did not use uv."
+      placeholder: "e.g. uv 0.13.7"
+  - type: input
+    id: version
+    attributes:
+      label: QOS version or commit
+      description: "`uv run qos --version` (e.g. qos 0.1.6) and/or `git rev-parse --short HEAD`."
+      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command you ran
+      description: If you got stuck, the exact command that failed. If it worked, the last command you ran (e.g. the pytest or backtest line).
+      placeholder: "e.g. uv sync   or   uv run scripts/backtest.py configs/strategies/ema_cross_eurusd_5m.json --days 90"
+  - type: textarea
+    id: error
+    attributes:
+      label: Full error or last lines of output
+      description: Paste the full traceback if it is short, otherwise the last ~40 lines. Redact tokens, account ids, PINs and P/L first. Never paste the bearer token. If it worked, you can leave this blank or paste the successful summary without money figures.
+      render: text
+  - type: dropdown
+    id: ib
+    attributes:
+      label: How do you run IB Gateway / TWS? (optional)
+      description: Skip if you have not connected a broker yet. The no-broker pytest path does not need this.
+      options:
+        - "Container the Terminal created when I signed in"
+        - "IB Gateway installed on my machine"
+        - "TWS installed on my machine"
+        - "Not connected yet"
+  - type: input
+    id: port
+    attributes:
+      label: IB API port, if you know it (optional)
+      description: "IB Gateway paper is 4002, TWS paper is 7497. Without --port or IB_PORT, build_catalog.py uses the gateway you signed in to through the Terminal, otherwise it tries 4004. Live ports are different; say so if you used one."
+      placeholder: "e.g. 4002, 7497, or 4004"
+  - type: dropdown
+    id: terminal_kind
+    attributes:
+      label: Terminal (if relevant)
+      description: Leave as “Not using the Terminal” if you have not opened one.
+      options:
+        - "Not using the Terminal"
+        - "Web Terminal"
+        - "Desktop Terminal (dev build)"
+  - type: dropdown
+    id: mcp_mode
+    attributes:
+      label: AI / MCP mode (if relevant)
+      description: "Leave as “Not using MCP / AI” if you are not using a connected AI. In the Terminal, top bar → AI. Never paste the bearer token. Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice."
+      options:
+        - "Not using MCP / AI"
+        - "Read-only"
+        - "Ask first"
+        - "Auto"
+  - type: checkboxes
+    id: symptoms
+    attributes:
+      label: Did you see any of these messages? (optional)
+      description: "Tick what you saw, even if you got past it. The first two usually mean the Terminal could not find the engine's data/local_token file (README: start the Terminal with the same QOS_HOME as the engine, or set QOS_LOCAL_TOKEN_FILE)."
+      options:
+        - label: "\"AI assistant is in read-only mode\" while I was not using an AI"
+        - label: "\"local token required to create the first admin\""
+        - label: "Could not connect to IB Gateway / TWS (port or connection refused)"
+        - label: "\"buffer source array is read-only\" when loading bars (SDK install with pandas 3.x)"
+  - type: input
+    id: qos_home
+    attributes:
+      label: QOS_HOME (optional)
+      description: "Did the engine and the Terminal run with the same QOS_HOME? Write the path the engine printed after 'local token file:' only if it has no user name you want to keep private; never the file's contents."
+      placeholder: "e.g. same QOS_HOME for both (~/qos) / not set / different"
+  - type: input
+    id: pandas
+    attributes:
+      label: pandas version (optional, SDK only installs)
+      description: "Output of python -c 'import pandas; print(pandas.__version__)' in the environment where you installed qos-sdk."
+      placeholder: "e.g. 2.3.3"
+  - type: input
+    id: minutes
+    attributes:
+      label: Roughly how many minutes did it take? (optional)
+  - type: textarea
+    id: next
+    attributes:
+      label: What would you like to do next with QOS? (optional)

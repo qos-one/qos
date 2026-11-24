@@ -89,7 +89,7 @@ def test_edit_during_run_is_picked_up(pkgdir):
     assert build_strategy({"strategy": "demo", "instrument": "EUR/USD.IDEALPRO", "tf_minutes": 5}).user.p.k == 4
 
 
-@pytest.mark.skipif(not REAL_PKGS.exists(), reason="packages not installed on this machine")
+@pytest.mark.skipif(not (REAL_PKGS / "ema_cross@1.0.0").exists(), reason="ema_cross@1.0.0 package not installed on this machine")
 @pytest.mark.parametrize("name,cfg", [
     ("ema_cross", {**CFG}),
 ])

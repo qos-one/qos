@@ -1,0 +1,28 @@
+name: Question / usage help
+description: How to install, connect IBKR, or use the Terminal / MCP. Not a security report.
+title: "[question] "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please **redact** account numbers, API keys, tokens, passwords, PINs, bearer tokens, cookies, `.env` files and P/L figures. Do not attach a full `.env`. Never paste the bearer token or the contents of `data/local_token`. If you already posted a secret, edit it out of the issue and rotate it. Do not send a full `.env` in a follow-up.
+
+        Security problems: report privately as described in [SECURITY.md](https://github.com/qos-one/qos/blob/main/SECURITY.md), or via the repository Security tab — not this form.
+
+        QOS is trading software, not investment advice. This form is for technical questions only. Start on an IBKR paper account.
+
+        MCP and connected AI assistants: Optional and experimental. AI can make mistakes; you are responsible for every order it places. Account data you share goes to your chosen AI provider. Keep your token secret. Software, not financial advice.
+  - type: input
+    id: version
+    attributes:
+      label: QOS version or commit
+      placeholder: "e.g. qos 0.1.6 / 9dd5a13"
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
